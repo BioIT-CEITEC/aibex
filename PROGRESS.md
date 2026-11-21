@@ -23,7 +23,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
 - [x] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
 - [x] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
-- [ ] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
+- [x] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
 - [ ] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
 - [ ] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
 - [ ] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
@@ -70,6 +70,15 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T16b · done · `git mv frontend-e2e/{playwright.config.ts,e2e}` → `frontend/` (the empty
+  `frontend-e2e/` is gone; `frontend/.gitkeep` removed). New dev dependency `@playwright/test` (e2e runner; matches the
+  installed chromium-1255). Specs are now typechecked (`tsconfig.e2e.json` referenced from `tsconfig.json`) and linted
+  (node globals); the only spec change is `import { type Page }` in `chat.spec.ts`, required by
+  `verbatimModuleSyntax` – no assertion touched. `.gitignore`: `frontend/test-results/`, `frontend/playwright-report/`.
+  Makefile message and the docs/api.md path updated. Checks: `make test` 290 pass + typecheck/lint clean; phase-1
+  acceptance 34 pass; `make e2e` runs: both webServers start (toy bundle, FakeProvider, Vite proxy), all 8 specs fail
+  as expected (no `spec-version`/`chat-input` yet → T16c+). Screenshot of the scaffold page under Playwright (backend
+  ok, LLM provider fake): `logs/screens/T16b-scaffold-e2e.png`.
 - 2026-11-21 · T16a · done · `frontend/` written by hand (no `npm create`): Vite 8 + React 19 + TS 6.0 (pinned
   `~6.0.3` because typescript-eslint 8 needs TS < 6.1; TS 7 is out) + Tailwind 4 via `@tailwindcss/vite` (no
   tailwind.config, theme tokens in `src/index.css`) + shadcn/ui base (`components.json` new-york/neutral, `cn()` in

@@ -6,7 +6,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-  globalIgnores(['dist', 'e2e', 'playwright.config.ts', 'test-results', 'playwright-report']),
+  globalIgnores(['dist', 'test-results', 'playwright-report']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -19,6 +19,12 @@ export default defineConfig([
       ecmaVersion: 2022,
       globals: globals.browser,
     },
+  },
+  {
+    // Playwright e2e specs and config run in Node, not the browser
+    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    languageOptions: { globals: globals.node },
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
   },
   {
     // shadcn/ui components export variants next to components

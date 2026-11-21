@@ -1,7 +1,7 @@
 # API and internal contracts (v1)
 
-These contracts are what the acceptance tests (`backend/tests/acceptance/`, Playwright e2e in `frontend-e2e/e2e/`,
-moved to `frontend/e2e/` by task T16b) check. Change them only together with the tests and this file.
+These contracts are what the acceptance tests (`backend/tests/acceptance/`, Playwright e2e in `frontend/e2e/`)
+check. Change them only together with the tests and this file.
 Decisions behind some rules are recorded as Q1–Q9 in the `PROGRESS.md` Log.
 
 ## App factory and settings

@@ -1,5 +1,5 @@
-// Playwright e2e config for Aibex View. Move this folder's contents into frontend/ once the frontend exists:
-//   frontend/playwright.config.ts, frontend/e2e/*.spec.ts ; then `npm i -D @playwright/test && npx playwright install chromium`
+// Playwright e2e config for Aibex View: `make e2e` (or `npx playwright test e2e/<spec>.ts` in frontend/).
+// Browsers: `npx playwright install chromium` once per machine.
 // Runs the backend with the FakeProvider and the synthetic toy bundle – no network, no real data.
 import { defineConfig, devices } from '@playwright/test';
 
