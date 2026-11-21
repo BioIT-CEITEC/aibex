@@ -27,7 +27,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
 - [x] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
 - [x] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
-- [ ] T17c PCA + heatmap rendering (after: T15c, T17b)
+- [x] T17c PCA + heatmap rendering (after: T15c, T17b)
 - [ ] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
 - [ ] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
 - [ ] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
@@ -70,6 +70,18 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T17c · done · `src/lib/plotFigure.ts`: `buildPcaFigure` (PC1/PC2 with explained-variance titles from
+  panel-data, sample names as point text up to 40 samples, colour by `color.field` = samples.tsv column –
+  categorical with spec palette/legend or numeric colour scale; hover shows sample + all annotation columns; sample
+  name in `customdata[0]`) and `buildHeatmapFigure` (long `row/column/value/group` pivoted to a matrix, first row on
+  top, category axes, 1 px cell gaps; `row-z` → diverging blue–grey–red scale with `zmid: 0`, other scales →
+  single-hue sequential; `color.colorscale` overrides; sample groups as a coloured band + name above contiguous column
+  runs). `buildFigure` dispatches by kind; `plotly` overrides apply to both. PlotPanel placeholder removed. Heatmap
+  rows still show the matrix key (gene_id) – a `row_label` from a linked table remains a possible follow-up (see
+  T15c note). New e2e `e2e/matrix.spec.ts` (PCA points/axis titles/legend; heatmap layer, y ticks, group labels).
+  Checks: `make test` 290 pass + typecheck/lint clean; phase-1 acceptance 34 pass; `make e2e`: dashboard, table,
+  plot, matrix pass (8); chat E2.* and widget E4.1 fail as expected (T24a/T41b). Screenshot
+  `logs/screens/T17c-pca-heatmap.png` (1440 wide). No new dependencies.
 - 2026-11-21 · T17b · done · `src/lib/plotFigure.ts`: pure `buildFigure(panel, panelData)` → Plotly traces + layout
   for scatter/line (x-sorted)/bar/histogram/box/violin; categorical colour = one trace per value with the spec
   `palette` (legend above the plot, titled by `color.label`/`field`, never a raw `expr`), numeric colour on

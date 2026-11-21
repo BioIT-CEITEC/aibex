@@ -83,7 +83,207 @@ function scaleSizes(values: JsonValue[]): number[] {
   return values.map((v) => (typeof v === 'number' && Number.isFinite(v) ? (hi > lo ? 4 + (12 * (v - lo)) / (hi - lo) : 8) : 4));
 }
 
+/** Diverging scale for centred values (row z-scores): blue – neutral grey – red, never a hue at the midpoint. */
+const DIVERGING: [number, string][] = [
+  [0, '#2b59c3'],
+  [0.25, '#8da4dc'],
+  [0.5, '#e6e6e6'],
+  [0.75, '#e39a8a'],
+  [1, '#c0392b'],
+];
+/** Sequential single-hue scale (light → dark) for unscaled / log values. */
+const SEQUENTIAL: [number, string][] = [
+  [0, '#f2f5fb'],
+  [0.5, '#7f9fd6'],
+  [1, '#1d3f8f'],
+];
+
+function baseLayout(xTitle?: string, yTitle?: string): Record<string, unknown> {
+  return {
+    autosize: true,
+    margin: { l: 56, r: 16, t: 12, b: 48 },
+    font: { size: 11 },
+    xaxis: { title: { text: xTitle }, automargin: true, zeroline: false },
+    yaxis: { title: { text: yTitle }, automargin: true, zeroline: false },
+    hovermode: 'closest',
+    showlegend: false,
+    colorway: COLORWAY,
+  };
+}
+
+/**
+ * PCA of samples: panel-data has `x` (PC1), `y` (PC2), `sample` and the samples.tsv annotation columns; the spec's
+ * `color.field` names one of those annotation columns. Points carry the sample name as text and in the hover.
+ */
+export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
+  const cols = data.columns;
+  const xi = cols.indexOf('x');
+  const yi = cols.indexOf('y');
+  const sampleIdx = cols.indexOf('sample');
+  const colourField = panel.color?.field;
+  const ci = colourField ? cols.indexOf(colourField) : -1;
+  const annot = cols.map((c, i) => [c, i] as const).filter(([c]) => !['x', 'y', 'sample'].includes(c));
+  const rows = data.rows;
+  const layout = baseLayout(data.x_label ?? 'PC1', data.y_label ?? 'PC2');
+  layout.legend = {
+    orientation: 'h',
+    x: 1,
+    xanchor: 'right',
+    y: 1.01,
+    yanchor: 'bottom',
+    title: { text: panel.color?.label || colourField || '' },
+  };
+  const hover =
+    '<b>%{customdata[0]}</b>' +
+    annot.map(([c], k) => `<br>${c}: %{customdata[${k + 1}]}`).join('') +
+    '<br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<extra></extra>';
+  const trace = (rs: Row[]): Trace => ({
+    type: 'scatter',
+    mode: rs.length <= 40 ? 'markers+text' : 'markers',
+    x: rs.map((r) => r[xi]),
+    y: rs.map((r) => r[yi]),
+    text: rs.map((r) => (sampleIdx >= 0 ? r[sampleIdx] : '')),
+    textposition: 'top center',
+    textfont: { size: 10, color: '#444' },
+    customdata: rs.map((r) => [sampleIdx >= 0 ? r[sampleIdx] : '', ...annot.map(([, i]) => r[i])]),
+    hovertemplate: hover,
+    marker: { size: 10, opacity: 0.9, line: { width: 1, color: '#fff' } },
+    cliponaxis: false,
+  });
+
+  const traces: Trace[] = [];
+  if (ci >= 0 && isNumericColumn(rows, ci)) {
+    const t = trace(rows);
+    t.name = '';
+    t.marker = {
+      ...(t.marker as object),
+      color: rows.map((r) => r[ci]),
+      colorscale: panel.color?.colorscale ?? 'Viridis',
+      showscale: true,
+      colorbar: { title: { text: panel.color?.label || colourField }, thickness: 12 },
+    };
+    traces.push(t);
+  } else if (ci >= 0) {
+    const palette = panel.color?.palette ?? {};
+    let n = 0;
+    for (const [name, rs] of groupBy(rows, ci)) {
+      const t = trace(rs);
+      t.name = name;
+      t.marker = { ...(t.marker as object), color: palette[name] ?? COLORWAY[n++ % COLORWAY.length] };
+      traces.push(t);
+    }
+    layout.showlegend = true;
+    layout.margin = { l: 56, r: 16, t: 28, b: 48 };
+  } else {
+    const t = trace(rows);
+    t.name = '';
+    traces.push(t);
+  }
+  return applyOverrides({ data: traces, layout }, panel.plotly);
+}
+
+/**
+ * Heatmap: panel-data is long format `row, column, value, group` (rows in display order, columns grouped by
+ * `group_by`). Pivoted to a matrix; first row on top. Row z-scores get a diverging scale centred at 0, other scales
+ * a sequential one. Sample groups are drawn as a coloured band above the columns with the group name.
+ */
+export function buildHeatmapFigure(panel: PlotPanel, data: PanelData): Figure {
+  const cols = data.columns;
+  const ri = cols.indexOf('row');
+  const coli = cols.indexOf('column');
+  const vi = cols.indexOf('value');
+  const gi = cols.indexOf('group');
+  const rowNames: string[] = [];
+  const colNames: string[] = [];
+  const rowIx = new Map<string, number>();
+  const colIx = new Map<string, number>();
+  const colGroup = new Map<string, string | null>();
+  for (const r of data.rows) {
+    const rn = String(r[ri]);
+    const cn = String(r[coli]);
+    if (!rowIx.has(rn)) rowIx.set(rn, rowNames.push(rn) - 1);
+    if (!colIx.has(cn)) {
+      colIx.set(cn, colNames.push(cn) - 1);
+      const g = gi >= 0 ? r[gi] : null;
+      colGroup.set(cn, g === null || g === undefined ? null : String(g));
+    }
+  }
+  const z: (number | null)[][] = rowNames.map(() => colNames.map(() => null));
+  for (const r of data.rows) {
+    const v = r[vi];
+    z[rowIx.get(String(r[ri]))!][colIx.get(String(r[coli]))!] = typeof v === 'number' && Number.isFinite(v) ? v : null;
+  }
+
+  const centred = panel.scale === 'row-z';
+  const valueName = centred ? 'row z-score' : panel.scale === 'log1p' ? 'log1p(value)' : 'value';
+  const trace: Trace = {
+    type: 'heatmap',
+    x: colNames,
+    y: rowNames,
+    z,
+    colorscale: panel.color?.colorscale ?? (centred ? DIVERGING : SEQUENTIAL),
+    ...(centred ? { zmid: 0 } : {}),
+    xgap: 1,
+    ygap: 1,
+    hoverongaps: false,
+    colorbar: { title: { text: valueName, side: 'right' }, thickness: 12, len: 0.9 },
+    hovertemplate: `%{y}<br>%{x}<br>${valueName}: %{z:.2f}<extra></extra>`,
+  };
+  const layout = baseLayout();
+  layout.xaxis = { type: 'category', tickangle: -45, automargin: true, showgrid: false, ticks: '' };
+  layout.yaxis = {
+    type: 'category',
+    autorange: 'reversed',
+    automargin: true,
+    showgrid: false,
+    ticks: '',
+    tickfont: { size: rowNames.length > 40 ? 8 : 10 },
+  };
+
+  // group band: one coloured strip + name per contiguous run of columns with the same group
+  const runs: { name: string; start: number; end: number }[] = [];
+  colNames.forEach((c, k) => {
+    const g = colGroup.get(c);
+    if (g === null || g === undefined) return;
+    const last = runs[runs.length - 1];
+    if (last && last.name === g && last.end === k - 1) last.end = k;
+    else runs.push({ name: g, start: k, end: k });
+  });
+  if (runs.length) {
+    const palette = panel.color?.palette ?? {};
+    const colourOf = new Map<string, string>();
+    for (const run of runs) {
+      if (!colourOf.has(run.name)) colourOf.set(run.name, palette[run.name] ?? COLORWAY[colourOf.size % COLORWAY.length]);
+    }
+    layout.margin = { l: 56, r: 16, t: 30, b: 48 };
+    layout.shapes = runs.map((run) => ({
+      type: 'rect',
+      xref: 'x',
+      yref: 'paper',
+      x0: run.start - 0.5,
+      x1: run.end + 0.5,
+      y0: 1.01,
+      y1: 1.05,
+      fillcolor: colourOf.get(run.name),
+      line: { width: 1, color: '#fff' },
+    }));
+    layout.annotations = runs.map((run) => ({
+      xref: 'x',
+      yref: 'paper',
+      x: (run.start + run.end) / 2,
+      y: 1.05,
+      yanchor: 'bottom',
+      text: run.name,
+      showarrow: false,
+      font: { size: 10, color: '#333' },
+    }));
+  }
+  return applyOverrides({ data: [trace], layout }, panel.plotly);
+}
+
 export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
+  if (panel.kind === 'pca') return buildPcaFigure(panel, data);
+  if (panel.kind === 'heatmap') return buildHeatmapFigure(panel, data);
   const cols = data.columns;
   const ix = (name: string) => cols.indexOf(name);
   const xi = ix('x');
