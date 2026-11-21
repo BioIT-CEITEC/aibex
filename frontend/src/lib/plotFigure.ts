@@ -137,13 +137,42 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
     '<b>%{customdata[0]}</b>' +
     annot.map(([c], k) => `<br>${c}: %{customdata[${k + 1}]}`).join('') +
     '<br>PC1: %{x:.2f}<br>PC2: %{y:.2f}<extra></extra>';
+  // M1: replicates often sit almost on top of each other → their name labels collide. A point with k earlier
+  // neighbours closer than 10 % of the plot range gets the k-th label position around the marker.
+  const POSITIONS = ['top center', 'bottom center', 'middle right', 'middle left', 'top right', 'bottom left'];
+  const num = (v: unknown) => (typeof v === 'number' ? v : NaN);
+  const span = (i: number) => {
+    const vs = rows.map((r) => num(r[i])).filter(Number.isFinite);
+    return vs.length ? Math.max(...vs) - Math.min(...vs) || 1 : 1;
+  };
+  const sx = span(xi);
+  const sy = span(yi);
+  const labelPos = new Map<Row, string>();
+  rows.forEach((r, k) => {
+    // nearest other point (normalised units); the label goes on the side facing away from it
+    let best: { d: number; dx: number; dy: number } | null = null;
+    for (const o of rows) {
+      if (o === r) continue;
+      const dx = (num(r[xi]) - num(o[xi])) / sx;
+      const dy = (num(r[yi]) - num(o[yi])) / sy;
+      const d = Math.hypot(dx, dy);
+      if (Number.isFinite(d) && (!best || d < best.d)) best = { d, dx, dy };
+    }
+    let pos = 'top center';
+    if (best && best.d < 0.1) {
+      if (best.d < 1e-3) pos = POSITIONS[k % POSITIONS.length]; // (almost) identical points
+      else if (Math.abs(best.dy) >= Math.abs(best.dx) * 0.5) pos = best.dy > 0 ? 'top center' : 'bottom center';
+      else pos = best.dx > 0 ? 'middle right' : 'middle left';
+    }
+    labelPos.set(r, pos);
+  });
   const trace = (rs: Row[]): Trace => ({
     type: 'scatter',
     mode: rs.length <= 40 ? 'markers+text' : 'markers',
     x: rs.map((r) => r[xi]),
     y: rs.map((r) => r[yi]),
     text: rs.map((r) => (sampleIdx >= 0 ? r[sampleIdx] : '')),
-    textposition: 'top center',
+    textposition: rs.map((r) => labelPos.get(r) ?? 'top center'),
     textfont: { size: 10, color: '#444' },
     customdata: rs.map((r) => [sampleIdx >= 0 ? r[sampleIdx] : '', ...annot.map(([, i]) => r[i])]),
     hovertemplate: hover,
@@ -237,7 +266,9 @@ export function buildHeatmapFigure(panel: PlotPanel, data: PanelData): Figure {
     automargin: true,
     showgrid: false,
     ticks: '',
-    tickfont: { size: rowNames.length > 40 ? 8 : 10 },
+    tickfont: { size: rowNames.length > 40 ? 7 : rowNames.length > 20 ? 8 : 10 },
+    // M1: Plotly's auto ticks skip every other row label at ~30 rows; label every row up to 60
+    ...(rowNames.length <= 60 ? { tickmode: 'array', tickvals: rowNames, ticktext: rowNames } : {}),
   };
 
   // group band: one coloured strip + name per contiguous run of columns with the same group

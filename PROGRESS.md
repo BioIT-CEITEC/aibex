@@ -30,7 +30,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T17c PCA + heatmap rendering (after: T15c, T17b)
 - [x] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
 - [x] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
-- [ ] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
+- [x] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
 - [ ] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline (after: T11)
 
 ## Phase 2 – prompt editing
@@ -70,6 +70,17 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T18 · done · M1 visual pass on the toy default view at 1440×900. New e2e `e2e/visual.spec.ts`: ≥4
+  frames, all four plots drawn, table rows, no panel error/banner, no horizontal page scroll, frames do not overlap,
+  each plot's svg inside its frame and > 150 px high; writes `logs/screens/M1-viewport-1440x900.png` and
+  `M1-full-1440.png`. Fixes from looking at the screenshots (`src/lib/plotFigure.ts`): heatmap labelled only every
+  other row at 30 genes (Plotly auto ticks) → every row labelled up to 60 rows (font 10/8/7 by row count); PCA
+  replicate labels collided (WT_1/WT_3, KO_2/KO_3) → each label goes on the side facing away from its nearest
+  neighbour when it is within 10 % of the plot range. Left as is: the `genes` table (h 9, page_size 25) shows ~17 rows
+  and scrolls inside the panel with a sticky header – fine for the demo; heatmap rows still show gene_id (row_label
+  follow-up from T15c). docs/acceptance.md M1 row points at the new spec. Checks: `make test` 290 pass +
+  typecheck/lint clean; phase-1 acceptance 34 pass; `make e2e` 12 pass, chat E2.* and widget E4.1 fail as expected
+  (T24a/T41b). No new dependencies.
 - 2026-11-22 · T17e · done · Linked selection = view state in the zustand store (`selection: string[]`, `select(keys,
   'replace'|'toggle')`, cleared on a new session; no spec version). Key = `spec.selection.key` (off without it or with
   `linked: false`); a panel joins when its panel-data has that column. Table: click row (shift/ctrl/cmd toggles; plain
