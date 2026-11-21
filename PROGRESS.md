@@ -18,7 +18,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
 - [x] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
 - [x] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
-- [ ] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
+- [x] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
 - [ ] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
 - [ ] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
 - [ ] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
@@ -70,6 +70,15 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T14 · done · `aibex/default_view.py`: `find_role` (case-insensitive DESeq2/edgeR/limma names for
+  fc/padj/pvalue/mean/name), `generate_default_view(bundle)` → volcano (first plot, `label: {field: name, values: []}`,
+  significance colour via `expr`, quoted identifiers for names like `adj.P.Val`), MA (log10 of raw means), PCA +
+  top-30 heatmap on a matrix table linked to DE (colour/group = first samples.tsv annotation), `genes` table sorted by
+  padj; histogram fillers keep ≥4 panels; generic view for bundles without a DE table; `selection.key` = DE key.
+  `default_view(bundle)` serves the bundle's `default_view` file only if inside the bundle and valid, else the
+  generated one; the result is always validated (tables-only fallback). `GET /api/bundles/{id}/default-view`.
+  Tests: `tests/test_default_view.py` (14); `make test` 223 pass; phase-1 acceptance 30 pass incl. A1.4, the 4 errors
+  need `/sessions` (T15, expected). No frontend yet → no e2e. No new dependencies. Editing panels for ADAR2 are T32.
 - 2026-11-21 · T13b · done · `aibex/expr.py`: own tokenizer + recursive-descent parser for the Q1 grammar (CASE WHEN,
   comparisons, AND/OR/NOT, IS [NOT] NULL, string literals, the 10 allowed functions; length ≤ 2000, nesting ≤ 40);
   `compile_expr(expr, columns)` → normalised SQL rebuilt from tokens (identifiers re-quoted, case-insensitive column

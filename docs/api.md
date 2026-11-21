@@ -145,6 +145,10 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
 - The **first plot panel** (in panel order) is a volcano-like scatter of the DE table with `label: {field: <name column>, values: []}`.
 - Column roles (fold change, adjusted p-value, mean expression, gene name) are found by common names
   (DESeq2 / edgeR / limma); never hard-coded in the frontend.
+- Implementation `aibex/default_view.py`: panels `volcano`, `ma-plot` (when a mean column exists), `pca` + `top-genes`
+  heatmap (when a matrix table exists; heatmap only if linked to the DE table), `genes` table; histograms fill up to 4
+  panels. A bundle `default_view` file is used only if it lies inside the bundle and validates, else the generated view
+  is served (a warning is logged). Bundles without a DE-like table get a generic scatter/histogram/table view.
 
 ## Level 2 widget runtime
 - Rendered as `<iframe sandbox="allow-scripts" srcdoc="…">` (exactly `allow-scripts`, never `allow-same-origin`).

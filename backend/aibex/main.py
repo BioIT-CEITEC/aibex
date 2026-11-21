@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from aibex import __version__
 from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
+from aibex.default_view import default_view
 from aibex.query import QueryError, run_query
 from aibex.spec import parse_spec
 from aibex.validate import validate_spec
@@ -52,6 +53,11 @@ def _api_router() -> APIRouter:
     @router.get("/bundles/{bundle_id}/schema")
     def bundle_schema(bundle_id: str, request: Request) -> dict:
         return get_bundle(request, bundle_id).schema()
+
+    @router.get("/bundles/{bundle_id}/default-view")
+    def bundle_default_view(bundle_id: str, request: Request) -> dict:
+        """The bundle's `default_view` file if valid, else a generated spec (always valid)."""
+        return default_view(get_bundle(request, bundle_id))
 
     @router.post("/bundles/{bundle_id}/query")
     def bundle_query(bundle_id: str, body: QueryRequest, request: Request) -> dict:
