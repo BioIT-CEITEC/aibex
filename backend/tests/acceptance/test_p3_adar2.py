@@ -1,0 +1,71 @@
+"""Phase 3 – real ADAR2 bundle (RNA-seq DE + RNA editing). Criteria A3.* in docs/acceptance.md.
+
+Runs only where the bundle exists: $AIBEX_DATA_DIR/adar2-editing/bundle.yaml (never in CI / GitHub).
+"""
+
+import os
+from pathlib import Path
+
+import pytest
+import yaml
+
+pytestmark = pytest.mark.phase3
+
+
+def _real_data_dir() -> Path | None:
+    from aibex.config import Settings
+
+    d = Path(os.getenv("AIBEX_DATA_DIR") or Settings().data_dir)
+    return d if (d / "adar2-editing" / "bundle.yaml").exists() else None
+
+
+@pytest.fixture(scope="module")
+def real_client():
+    d = _real_data_dir()
+    if d is None:
+        pytest.skip("ADAR2 bundle not present")
+    from fastapi.testclient import TestClient
+
+    from aibex.config import Settings
+    from aibex.main import create_app
+
+    return TestClient(create_app(Settings(data_dir=d, llm_provider="fake")))
+
+
+def test_bundle_manifest_complete():
+    d = _real_data_dir()
+    if d is None:
+        pytest.skip("ADAR2 bundle not present")
+    m = yaml.safe_load((d / "adar2-editing" / "bundle.yaml").read_text())
+    assert m["id"] == "adar2-editing"
+    assert {"rna-seq", "rna-editing"} <= set(m["modalities"])
+    assert m.get("organism")
+    assert m.get("links"), "editing sites must link to genes"
+    for name, t in m["tables"].items():
+        assert t.get("key"), f"table {name} needs a key"
+        assert t.get("description"), f"table {name} needs a description"
+
+
+def test_schema_and_link_join(real_client):
+    s = real_client.get("/api/bundles/adar2-editing/schema").json()
+    link = s["links"][0]
+    lt, lc = link["from"].split(".")
+    rt, rc = link["to"].split(".")
+    sql = f"SELECT count(*) AS n FROM {lt} a JOIN {rt} b ON a.{lc} = b.{rc}"
+    r = real_client.post("/api/bundles/adar2-editing/query", json={"sql": sql})
+    assert r.status_code == 200, r.text
+    assert r.json()["rows"][0][0] > 0, "the link must actually join rows"
+
+
+def test_default_view_combines_modalities(real_client):
+    spec = real_client.get("/api/bundles/adar2-editing/default-view").json()
+    tables = {p.get("table") for p in spec["panels"]}
+    assert len(tables - {None}) >= 2, "default view should show both expression and editing"
+    assert real_client.post("/api/validate-spec", json=spec).json()["valid"] is True
+
+
+def test_raw_data_not_in_repo():
+    repo = Path(__file__).resolve().parents[3]
+    offenders = [p for p in repo.rglob("*") if "adar2" in p.name.lower() and p.suffix in {".parquet", ".tsv", ".csv", ".xlsx"}
+                 and ".git" not in p.parts and "node_modules" not in p.parts]
+    assert not offenders, f"ADAR2 data files inside the repo: {offenders}"

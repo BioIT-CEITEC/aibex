@@ -23,3 +23,6 @@ frontend/dist/
 .idea/
 .vscode/
 *.log
+
+logs/
+backend/tests/fixtures/toy-data/
