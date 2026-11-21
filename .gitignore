@@ -26,3 +26,4 @@ frontend/dist/
 
 logs/
 backend/tests/fixtures/toy-data/
+.playwright-mcp/

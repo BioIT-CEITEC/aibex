@@ -7,9 +7,9 @@ Status markers: `- [ ]` todo · `- [x]` done · `- [!]` blocked (reason in the L
 IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "Qn" = decision recorded in the Log.
 
 ## Phase 0 – setup (interactive, before the first overnight run)
-- [ ] T00 Phase 0 deploy done (pod running, URL works) – Vojta
-- [ ] T01 Node 22+, `uv`, Playwright browsers installed on the Mac (`npx playwright install chromium`); `node`/`npx` on the PATH Claude Code sees (the Playwright MCP currently fails: npx not found) – Vojta
-- [ ] T02 Acceptance kit copied into the repo; planning session reviewed this list – Vojta
+- [x] T00 Phase 0 deploy done (pod running, URL works) – Vojta
+- [x] T01 Node 22+, `uv`, Playwright browsers installed on the Mac (`npx playwright install chromium`); `node`/`npx` on the PATH Claude Code sees (the Playwright MCP currently fails: npx not found) – Vojta
+- [x] T02 Acceptance kit copied into the repo; planning session reviewed this list – Vojta
 - [x] T03 Answer the open questions Q1–Q9 (answers in the Log; docs and tests updated) – Vojta
 
 ## Phase 1 – bundles + dashboard
