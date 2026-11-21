@@ -21,7 +21,7 @@ title: ADAR2-KO mouse – RNA-seq and RNA editing
 description: >
   Differential expression and A-to-I editing in ADAR2 knockout vs wild type mice.
 organism: Mus musculus
-genome: GRCm39            # mouse build used in the analysis (GRCm38/39 – take it from the R code); informative only
+genome: GRCm38            # mm10; informative only – the app never needs the genome
 modalities: [rna-seq, rna-editing]
 contrast: {name: KO_vs_WT, numerator: KO, denominator: WT}
 samples: samples.tsv

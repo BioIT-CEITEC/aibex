@@ -46,9 +46,9 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [ ] T27 Morning review: merge Phases 1–2 to `main`, push, `make restart` – Vojta
 
 ## Phase 3 – ADAR2
-- [ ] T29 Put the ADAR2 results at `$AIBEX_DATA_DIR/../raw/adar2-editing`: expression results (DE table, RSEM), editing result tables/counts, and the R analysis code – Vojta
+- [x] T29 Put the ADAR2 results at `$AIBEX_DATA_DIR/../raw/adar2-editing`: expression results (DE table, RSEM), editing result tables/counts, and the R analysis code – Vojta
 - [ ] T30 Inspect `raw/adar2-editing` freely (data are published): read the R code to learn the filters/normalisation, map files → bundle tables; write assumptions, file sizes and the planned preprocessing to `docs/adar2-notes.md` (in git, no data rows beyond a few examples); do not copy raw files (after: T29)
-- [ ] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); no genome needed [A3.1, A3.2] (after: T30, T11)
+- [ ] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); contrast ADAR vs WT in both modalities (Q10); no genome needed [A3.1, A3.2] (after: T30, T11)
 - [ ] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
 - [ ] T33 M3: confirm the assumptions in `data/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
 
@@ -84,5 +84,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - **Q7 sizes:** ~4000 realistically edited sites, but the raw files can be big → preprocess/filter in the converter,
   following Vojta's R code; final tables are small enough to load into memory.
 - **Q8 widget libraries:** React and Plotly inside the sandbox.
-- **Q9 genome:** organism is mouse (*Mus musculus*); build GRCm38/GRCm39 – take the exact one from the R code in T30.
-  Informative only: nothing in the app uses the genome, only the result tables.
+- **Q9 genome:** mouse (*Mus musculus*), GRCm38 (mm10). Informative only: nothing in the app uses the genome.
+- **Q10 main contrast** (2026-11-21): use **ADAR vs WT** (`input_files/ADAR_vs_WT_DESeq2.tsv`, `DE_RSEM/ADAR_vs_WT`) as the
+  bundle's `de` table and `contrast`. It is a use case, not a real analysis – but the editing tables must use the same
+  comparison (ADAR vs WT samples) so that expression and editing changes reflect each other in the views.
