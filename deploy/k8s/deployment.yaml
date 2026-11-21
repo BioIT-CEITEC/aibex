@@ -28,7 +28,14 @@ spec:
           image: docker.io/alpine/git:2.47.2
           command: ["sh", "-c"]
           args:
-            - git clone --depth 1 --branch "$GIT_BRANCH" "$GIT_REPO" /app && git -C /app log -1 --oneline
+            # emptyDir root is not owned by uid 1000 → git refuses it ("dubious ownership") unless marked safe.
+            # Clear leftovers first so a restarted init container does not fail on "not an empty directory".
+            - |
+              set -e
+              git config --global --add safe.directory /app
+              find /app -mindepth 1 -delete
+              git clone --depth 1 --branch "$GIT_BRANCH" "$GIT_REPO" /app
+              git -C /app log -1 --oneline
           env:
             - {name: GIT_REPO, value: "https://github.com/BioIT-CEITEC/aibex.git"}
             - {name: GIT_BRANCH, value: "main"}
