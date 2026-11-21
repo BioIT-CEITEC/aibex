@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -17,6 +17,8 @@ from aibex import __version__
 from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
 from aibex.query import QueryError, run_query
+from aibex.spec import parse_spec
+from aibex.validate import validate_spec
 
 
 class QueryRequest(BaseModel):
@@ -59,6 +61,21 @@ def _api_router() -> APIRouter:
             return run_query(bundle.cursor(), body.sql, body.limit)
         except QueryError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    @router.post("/validate-spec")
+    def validate_spec_endpoint(request: Request, data: Any = Body(...)) -> dict:  # noqa: B008
+        """Structural + semantic validation against the spec's bundle; always 200 `{valid, errors}`."""
+        spec, errors = parse_spec(data)
+        if spec is None:
+            return {"valid": False, "errors": errors}
+        try:
+            bundle = get_registry(request).get(spec.bundle)
+        except BundleNotFound:
+            return {"valid": False, "errors": [f"bundle: unknown bundle {spec.bundle!r}"]}
+        except BundleError as exc:
+            return {"valid": False, "errors": [f"bundle: bundle {spec.bundle!r} cannot be loaded: {exc}"]}
+        _, errors = validate_spec(data, bundle)
+        return {"valid": not errors, "errors": errors}
 
     return router
 

@@ -17,7 +17,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
 - [x] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
 - [x] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
-- [ ] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
+- [x] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
 - [ ] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
 - [ ] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
 - [ ] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
@@ -70,6 +70,17 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T13b · done · `aibex/expr.py`: own tokenizer + recursive-descent parser for the Q1 grammar (CASE WHEN,
+  comparisons, AND/OR/NOT, IS [NOT] NULL, string literals, the 10 allowed functions; length ≤ 2000, nesting ≤ 40);
+  `compile_expr(expr, columns)` → normalised SQL rebuilt from tokens (identifiers re-quoted, case-insensitive column
+  match → canonical name) + referenced columns – T15b should run this SQL, never the raw string.
+  `aibex/validate.py`: `validate_spec(data, bundle)` = structural + semantic (tables/fields incl. label/facet/sort/
+  selection key, expr parse + `LIMIT 0` DuckDB dry run for type errors, pca/heatmap matrix table + samples.tsv columns
+  + `rows.by` linked, widget code size/blocklist + input SQL guard); errors carry a location and a "did you mean"
+  hint for LLM repair. `bundles.py` now loads `samples.tsv` (`Bundle.samples_columns`, `samples`,
+  `matrix_columns()` – ready for T15c). `POST /api/validate-spec` (always 200; unknown bundle → `valid: false`).
+  docs/api.md: semantic rules listed. Tests: `test_expr.py`, `test_validate.py`; `make test` 209 pass; phase-1
+  acceptance 29 pass incl. all A1.5, the 5 failing need T14/T15 (expected). No new dependencies.
 - 2026-11-21 · T13a · done · `aibex/spec.py`: Pydantic models `Spec`, `Filter` (field/op/value xor `expr`, value
   shape per op), `LayoutItem` (12-col grid), panels as a discriminated union on `type` (`PlotPanel` with per-kind
   checks for scatter/…/pca/heatmap, `TablePanel`, `TextPanel`, `WidgetPanel`), `Axis`/`Color`/`Size`/`Label`/

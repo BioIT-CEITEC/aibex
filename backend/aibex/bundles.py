@@ -92,6 +92,20 @@ class Bundle:
     con: duckdb.DuckDBPyConnection
     tables: dict[str, dict] = field(default_factory=dict)  # name -> schema entry (see schema())
     mtime: float = 0.0
+    # samples.tsv (optional): column names (first is `sample`) and rows as dicts; used by pca/heatmap panels
+    samples_columns: list[str] = field(default_factory=list)
+    samples: list[dict] = field(default_factory=list)
+
+    def matrix_columns(self, table: str) -> list[str]:
+        """Sample columns of a matrix table: numeric non-key columns, restricted to samples.tsv names if present."""
+        t = self.tables.get(table)
+        if t is None:
+            return []
+        numeric = [c for c, m in t["columns"].items() if c != t.get("key") and m["type"] in ("int", "float")]
+        if self.samples:
+            names = {str(s.get(self.samples_columns[0])) for s in self.samples}
+            numeric = [c for c in numeric if c in names]
+        return numeric
 
     def cursor(self) -> duckdb.DuckDBPyConnection:
         """A per-request cursor (DuckDB connections must not be shared across threads)."""
@@ -119,8 +133,12 @@ def _resolve_inside(base: Path, rel: str) -> Path:
     return p
 
 
+def _sql_str(path: Path) -> str:
+    return str(path).replace("'", "''")
+
+
 def _reader_sql(path: Path) -> str:
-    lit = "'" + str(path).replace("'", "''") + "'"
+    lit = "'" + _sql_str(path) + "'"
     suffix = path.suffix.lower()
     if suffix == ".parquet":
         return f"read_parquet({lit})"
@@ -176,6 +194,15 @@ def load_bundle(manifest: Path) -> Bundle:
                 t, _, c = str(lk.get(side, "")).partition(".")
                 if t not in tables or c not in tables[t]["columns"]:
                     raise BundleError(f"link {lk!r}: {side} column not found")
+        samples_columns: list[str] = []
+        samples: list[dict] = []
+        if meta.get("samples"):
+            spath = _resolve_inside(base, str(meta["samples"]))
+            rel = con.execute(f"SELECT * FROM read_csv('{_sql_str(spath)}', delim='\t', header=true, all_varchar=true)")
+            samples_columns = [d[0] for d in rel.description or []]
+            samples = [dict(zip(samples_columns, r)) for r in rel.fetchall()]
+            if not samples_columns or samples_columns[0] != "sample":
+                raise BundleError(f"{meta['samples']}: the first column must be 'sample'")
         # defence in depth: SQL on this connection must not touch files, network or settings
         con.execute("SET enable_external_access = false")
         con.execute("SET lock_configuration = true")
@@ -185,7 +212,16 @@ def load_bundle(manifest: Path) -> Bundle:
     except BundleError:
         con.close()
         raise
-    return Bundle(id=bundle_id, path=base, meta=meta, con=con, tables=tables, mtime=manifest.stat().st_mtime)
+    return Bundle(
+        id=bundle_id,
+        path=base,
+        meta=meta,
+        con=con,
+        tables=tables,
+        mtime=manifest.stat().st_mtime,
+        samples_columns=samples_columns,
+        samples=samples,
+    )
 
 
 class BundleRegistry:

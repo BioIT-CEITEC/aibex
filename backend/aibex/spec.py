@@ -2,7 +2,7 @@
 
 Structural checks only (T13a): field types, allowed enum values, `field` xor `expr`, kebab-case unique ids,
 layout <-> panels, plain-JSON `plotly` overrides. Checks against the bundle schema, the `expr` grammar and widget
-code/SQL are semantic and live in a separate step (T13b).
+code/SQL are semantic and live in aibex/validate.py (`validate_spec` runs both).
 
 Models forbid unknown fields so a typo in an LLM patch ("colour", "lable") becomes a validation error the LLM can
 repair, instead of being silently ignored.
