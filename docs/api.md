@@ -64,7 +64,7 @@ class LLMProvider(Protocol):
 |---|---|---|---|
 | GET | `/health` | – | `{status, version, llm_provider, llm_configured, llm_models, data_dir_exists}` |
 | GET | `/bundles` | – | `[{id, title, modalities, tables}]`; an entry with a broken bundle.yaml is `{id, error}` |
-| GET | `/bundles/{id}/schema` | – | `{id, title, organism?, tables: {name: {description, key, row_count, columns: {col: {type, description?}}}}, links: [{from, to}]}` (404 unknown bundle) |
+| GET | `/bundles/{id}/schema` | – | `{id, title, organism?, tables: {name: {description, key, row_count, columns: {col: {type, description?}}}}, links: [{from, to}]}` (404 unknown bundle; 500 `{detail}` with the reason when the bundle cannot be loaded, e.g. missing file, declared column/key/link column not in the data) |
 | POST | `/bundles/{id}/query` | `{sql, limit?}` | `{columns, rows, row_count, truncated}` – read-only single SELECT/WITH, else **400** |
 | GET | `/bundles/{id}/default-view` | – | a valid spec (from `default_view` in bundle.yaml or generated) |
 | GET | `/bundles/{id}/views` | – | `[{name, title}]` saved views (Phase 5) |

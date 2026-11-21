@@ -14,7 +14,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Phase 1 – bundles + dashboard
 - [x] T10 `create_app()` factory + `Settings.llm_provider` per docs/api.md; keep `app = create_app()`; `make test` passes
-- [ ] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
+- [x] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
 - [ ] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
 - [ ] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
 - [ ] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
@@ -70,6 +70,16 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T11 · done · `aibex/bundles.py`: `load_bundle` creates one in-memory DuckDB per bundle and
+  materialises every bundle table as a DuckDB table with the same name (parquet/tsv/csv; file paths must stay inside the
+  bundle), so tables are joinable directly. Columns: declared type/description win, others inferred → vocabulary
+  (`string/int/float/bool/date`); declared columns, `key` and link columns are checked against the data
+  (`BundleError` → 500 with the reason). After loading: `enable_external_access=false` + `lock_configuration=true`
+  (done here already; T12 still adds the statement guard). `BundleRegistry` on `app.state.bundles` caches per bundle
+  and reloads when bundle.yaml's mtime changes; requests use `con.cursor()` (thread safety). New `GET
+  /bundles/{id}/schema` (docs/api.md: 500 case added). Tests: `tests/test_bundles.py` (21); acceptance A1.1/A1.2
+  pass (3), other phase-1 failures are 404s of T12+ endpoints (expected). `make test` ran fine natively this time
+  (no Rosetta issue). No new dependencies.
 - 2026-11-21 · T10 · done · `create_app(settings, llm_provider)` factory (state on `app.state`, routes on an `/api`
   router, `app = create_app()` kept); `Settings` reads env at instantiation (not import), new `llm_provider`
   (`openai` default | `fake`, validated), `/health` also reports `llm_provider` (docs/api.md updated). Provider

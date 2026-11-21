@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from aibex import __version__
-from aibex.bundles import list_bundles
+from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
 
 
@@ -38,9 +38,27 @@ def _api_router() -> APIRouter:
 
     @router.get("/bundles")
     def bundles(request: Request) -> list[dict]:
-        return list_bundles(get_settings(request).data_dir)
+        return get_registry(request).list()
+
+    @router.get("/bundles/{bundle_id}/schema")
+    def bundle_schema(bundle_id: str, request: Request) -> dict:
+        return get_bundle(request, bundle_id).schema()
 
     return router
+
+
+def get_registry(request: Request) -> BundleRegistry:
+    return request.app.state.bundles
+
+
+def get_bundle(request: Request, bundle_id: str) -> Bundle:
+    """Loaded bundle or HTTP error: 404 unknown id, 500 with the reason when the bundle cannot be loaded."""
+    try:
+        return get_registry(request).get(bundle_id)
+    except BundleNotFound:
+        raise HTTPException(status_code=404, detail=f"unknown bundle {bundle_id!r}") from None
+    except BundleError as exc:
+        raise HTTPException(status_code=500, detail=f"bundle {bundle_id!r} cannot be loaded: {exc}") from None
 
 
 def _placeholder_page() -> str:
@@ -63,6 +81,7 @@ def create_app(settings: Settings | None = None, llm_provider: Any | None = None
     app = FastAPI(title="Aibex View", version=__version__)
     app.state.settings = settings
     app.state.llm_provider = llm_provider
+    app.state.bundles = BundleRegistry(settings.data_dir)
     app.include_router(_api_router())
 
     if settings.frontend_dist.exists():
