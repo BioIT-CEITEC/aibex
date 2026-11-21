@@ -24,7 +24,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
 - [x] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
 - [x] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
-- [ ] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
+- [x] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
 - [ ] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
 - [ ] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
 - [ ] T17c PCA + heatmap rendering (after: T15c, T17b)
@@ -70,6 +70,18 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T16c · done · `src/lib/types.ts` (TS mirror of the spec + REST payloads), `src/lib/api.ts` (typed
+  client for all current endpoints, `ApiError` with the backend's `detail` / 422 `detail.errors`, "backend unreachable"
+  on network errors), `src/store.ts` (zustand: bundles, session, spec, version, history, loading/busy, error;
+  `bootstrap(?bundle=)` → first usable bundle when absent, `selectBundle` = new session + `replaceState` of
+  `?bundle=`, `applyPatch`/`undo`/`redo`/`receiveSpec` take the backend's spec and refresh history; stale responses
+  dropped via a sequence counter, so StrictMode's double effect is harmless). App shell: header with `bundle-select`
+  (broken bundles disabled), `spec-version`, `error-banner` (only on error, Retry when the action can be re-run,
+  dismiss); main area lists the spec's panels as a placeholder until T17a. New dependency `zustand` ^5 (state store,
+  planned in CLAUDE.md). Checks: `make test` 290 pass + typecheck/lint clean; phase-1 acceptance 34 pass;
+  `make e2e ARGS=e2e/dashboard.spec.ts`: E1.2 + E1.3 pass, E1.1 fails as expected (no panel grid/plot/table → T17a/b).
+  Screenshot `logs/screens/T16c-shell.png`. Note: `npm install` with `cd frontend &&` is refused by the runner;
+  `npm --prefix frontend install …` works.
 - 2026-11-21 · T16b · done · `git mv frontend-e2e/{playwright.config.ts,e2e}` → `frontend/` (the empty
   `frontend-e2e/` is gone; `frontend/.gitkeep` removed). New dev dependency `@playwright/test` (e2e runner; matches the
   installed chromium-1255). Specs are now typechecked (`tsconfig.e2e.json` referenced from `tsconfig.json`) and linted

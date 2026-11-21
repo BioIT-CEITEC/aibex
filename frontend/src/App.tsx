@@ -1,52 +1,51 @@
-import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { useEffect } from 'react';
+import { BundleSelect } from '@/components/BundleSelect';
+import { ErrorBanner } from '@/components/ErrorBanner';
+import { useAppStore } from '@/store';
 
-type Health = { status?: string; llm_provider?: string } | null;
-
-// Scaffold page (T16a). The real dashboard (bundle selector, grid, chat) arrives in T16c/T17*.
+// App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
+// The panel grid (T17a+), chat (T24a) and history/undo (T24b) plug into the main area.
 export default function App() {
-  const [health, setHealth] = useState<Health>(null);
-  const [error, setError] = useState<string | null>(null);
+  const bootstrap = useAppStore((s) => s.bootstrap);
+  const spec = useAppStore((s) => s.spec);
+  const version = useAppStore((s) => s.version);
+  const loading = useAppStore((s) => s.loading);
 
-  const load = () =>
-    fetch('/api/health')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((h: Health) => {
-        setHealth(h);
-        setError(null);
-      })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-
-  const check = () => {
-    setHealth(null);
-    setError(null);
-    void load();
-  };
-
-  useEffect(() => void load(), []);
+  useEffect(() => {
+    void bootstrap(new URLSearchParams(window.location.search).get('bundle'));
+  }, [bootstrap]);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-4 p-8">
-      <h1 className="text-2xl font-semibold">Aibex View</h1>
-      <p className="text-muted-foreground">
-        Assistant for Integrated Bioinformatics EXecution – interactive results dashboard. Frontend scaffold; the
-        dashboard is not built yet.
-      </p>
-      <div className="flex items-center gap-3 rounded-lg border p-4 text-sm" data-testid="backend-status">
-        <span className="font-medium">Backend:</span>
-        {error ? (
-          <span className="text-destructive">unreachable ({error})</span>
-        ) : health ? (
-          <span>
-            {health.status ?? 'ok'} · LLM provider: {health.llm_provider ?? 'unknown'}
+    <div className="flex min-h-screen flex-col">
+      <header className="flex items-center gap-4 border-b px-4 py-2">
+        <h1 className="text-lg font-semibold">Aibex View</h1>
+        <span className="truncate text-sm text-muted-foreground">{spec?.title}</span>
+        <div className="ml-auto flex items-center gap-4">
+          <BundleSelect />
+          <span className="text-sm text-muted-foreground">
+            version <span data-testid="spec-version">{version ?? '–'}</span>
           </span>
-        ) : (
-          <span className="text-muted-foreground">checking…</span>
-        )}
-        <Button variant="outline" size="sm" className="ml-auto" onClick={check}>
-          Retry
-        </Button>
-      </div>
-    </main>
+        </div>
+      </header>
+      <ErrorBanner />
+      <main className="flex-1 p-4">
+        {loading && !spec ? (
+          <p className="text-sm text-muted-foreground">Opening bundle…</p>
+        ) : spec ? (
+          <section className="text-sm">
+            <p className="mb-2 text-muted-foreground">
+              {spec.panels.length} panels in the view spec (the dashboard grid is not built yet):
+            </p>
+            <ul className="list-inside list-disc">
+              {spec.panels.map((p) => (
+                <li key={p.id}>
+                  {p.title || p.id} <span className="text-muted-foreground">({p.type === 'plot' ? p.kind : p.type})</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+      </main>
+    </div>
   );
 }
