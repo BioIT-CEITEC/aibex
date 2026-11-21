@@ -1,0 +1,11 @@
+# Data volume for results bundles (mounted at /data). Upload with `make upload-data BUNDLE=...`.
+# Uses the cluster's default storage class (?) – check with `kubectl get pvc -n bystry-ns` after apply.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aibex-data
+  labels: {app: aibex}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests: {storage: 2Gi}

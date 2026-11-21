@@ -1,0 +1,111 @@
+# Aibex View – "no registry" deployment (option C).
+# Init containers clone the public repo and build the frontend; the main container installs the
+# backend with uv and runs uvicorn. Update = `make restart` (re-clones the branch).
+# Later: replace with a prebuilt image (GHCR or the OmiCZ Harbor/Fleet pipeline).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aibex
+  labels: {app: aibex}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: aibex}
+  template:
+    metadata:
+      labels: {app: aibex}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: clone
+          image: docker.io/alpine/git:2.47.2
+          command: ["sh", "-c"]
+          args:
+            - git clone --depth 1 --branch "$GIT_BRANCH" "$GIT_REPO" /app && git -C /app log -1 --oneline
+          env:
+            - {name: GIT_REPO, value: "https://github.com/BioIT-CEITEC/aibex.git"}
+            - {name: GIT_BRANCH, value: "main"}
+            - {name: HOME, value: /tmp}
+          volumeMounts:
+            - {name: app, mountPath: /app}
+            - {name: tmp, mountPath: /tmp}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+        - name: build-frontend
+          image: docker.io/library/node:22-slim
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -f /app/frontend/package.json ]; then
+                cd /app/frontend && npm ci --no-audit --no-fund && npm run build
+              else
+                echo "no frontend yet – skipping build"
+              fi
+          env:
+            - {name: HOME, value: /tmp}
+            - {name: npm_config_cache, value: /tmp/.npm}
+          volumeMounts:
+            - {name: app, mountPath: /app}
+            - {name: tmp, mountPath: /tmp}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 3Gi}
+      containers:
+        - name: aibex
+          image: docker.io/library/python:3.12-slim
+          command: ["sh", "-c"]
+          args:
+            - |
+              pip install --no-cache-dir --user uv && \
+              cd /app/backend && ~/.local/bin/uv sync --no-dev && \
+              exec ~/.local/bin/uv run --no-dev uvicorn aibex.main:app --host 0.0.0.0 --port 8000 --proxy-headers
+          env:
+            - {name: HOME, value: /tmp/home}
+            - {name: UV_CACHE_DIR, value: /tmp/uv-cache}
+            - {name: UV_PYTHON_DOWNLOADS, value: never}
+            - {name: PYTHONUNBUFFERED, value: "1"}
+            - {name: AIBEX_DATA_DIR, value: /data}
+            - {name: AIBEX_FRONTEND_DIST, value: /app/frontend/dist}
+          envFrom:
+            - secretRef: {name: aibex-llm, optional: true}   # LLM_BASE_URL, LLM_API_KEY, LLM_MODEL_FAST, LLM_MODEL_CODE
+          ports:
+            - {name: http, containerPort: 8000}
+          startupProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+            failureThreshold: 30          # up to 5 min for uv sync on first start
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 30
+          volumeMounts:
+            - {name: app, mountPath: /app}
+            - {name: tmp, mountPath: /tmp}
+            - {name: data, mountPath: /data}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "2", memory: 2Gi}
+      volumes:
+        - {name: app, emptyDir: {}}
+        - {name: tmp, emptyDir: {}}
+        - name: data
+          persistentVolumeClaim: {claimName: aibex-data}

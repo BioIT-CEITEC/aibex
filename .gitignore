@@ -1,0 +1,25 @@
+# secrets
+.env
+.env.*
+!.env.example
+# data – never commit real datasets
+data/*
+!data/.gitkeep
+*.parquet
+*.h5ad
+*.bam
+*.vcf.gz
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+# node
+node_modules/
+frontend/dist/
+# misc
+.DS_Store
+.idea/
+.vscode/
+*.log

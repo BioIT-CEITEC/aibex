@@ -1,0 +1,27 @@
+# Public URL with automatic Let's Encrypt TLS (same pattern as the OmiCZ services on kuba-cluster).
+# If the host is taken, use aibex.bystry-ns.dyn.cloud.e-infra.cz instead (both places below).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aibex
+  labels: {app: aibex}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"    # long LLM answers / SSE
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"        # stream SSE immediately
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [aibex.dyn.cloud.e-infra.cz]
+      secretName: aibex-dyn-cloud-e-infra-cz-tls
+  rules:
+    - host: aibex.dyn.cloud.e-infra.cz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aibex
+                port: {name: http}

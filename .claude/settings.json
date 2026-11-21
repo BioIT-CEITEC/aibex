@@ -1,0 +1,52 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(make dev:*)",
+      "Bash(make test:*)",
+      "Bash(make eval-llm:*)",
+      "Bash(make logs:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(git branch:*)",
+      "Bash(kubectl -n bystry-ns get:*)",
+      "Bash(kubectl -n bystry-ns describe:*)",
+      "Bash(kubectl -n bystry-ns logs:*)",
+      "Bash(kubectl auth can-i:*)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(wc:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(make deploy:*)",
+      "Bash(make restart:*)",
+      "Bash(make upload-data:*)",
+      "Bash(kubectl -n bystry-ns apply:*)",
+      "Bash(kubectl -n bystry-ns rollout:*)",
+      "Bash(kubectl -n bystry-ns cp:*)",
+      "Bash(kubectl -n bystry-ns create:*)",
+      "Bash(kubectl apply:*)"
+    ],
+    "deny": [
+      "Bash(kubectl delete:*)",
+      "Bash(kubectl -n bystry-ns delete:*)",
+      "Bash(kubectl -n omicz-dev-ns:*)",
+      "Bash(git push --force:*)",
+      "Bash(rm -rf:*)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.llm)"
+    ]
+  }
+}
