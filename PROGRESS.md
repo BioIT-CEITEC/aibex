@@ -16,7 +16,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T10 `create_app()` factory + `Settings.llm_provider` per docs/api.md; keep `app = create_app()`; `make test` passes
 - [x] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
 - [x] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
-- [ ] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
+- [x] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
 - [ ] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
 - [ ] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
 - [ ] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
@@ -70,6 +70,15 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T13a · done · `aibex/spec.py`: Pydantic models `Spec`, `Filter` (field/op/value xor `expr`, value
+  shape per op), `LayoutItem` (12-col grid), panels as a discriminated union on `type` (`PlotPanel` with per-kind
+  checks for scatter/…/pca/heatmap, `TablePanel`, `TextPanel`, `WidgetPanel`), `Axis`/`Color`/`Size`/`Label`/
+  `HeatmapRows`. `extra="forbid"` everywhere so LLM typos fail loudly. Structural checks: kebab-case unique panel
+  and filter ids, layout ↔ panels (missing/orphan/duplicate), plain-JSON `plotly`. `parse_spec(data)` → `(spec,
+  errors)` with readable `loc: msg` strings, never raises; `dump_spec` drops None fields. Semantic checks (bundle
+  schema, `expr` grammar, widget code/SQL) and `POST /validate-spec` remain for T13b. docs/api.md: structural rules
+  listed. Tests: `tests/test_spec.py` (53); `make test` passes (127); phase-1 acceptance 16 pass, the rest need
+  T13b+ endpoints (expected). No new dependencies.
 - 2026-11-21 · T12 · done · `aibex/query.py`: `check_readonly` (DuckDB `extract_statements` → exactly one SELECT;
   DuckDB `tokenize` → no call to forbidden functions: `read_*`, `pragma_*`, `glob`, `query`/`query_table`,
   `*_scan`, `getenv`, `duckdb_secrets`, … – names in string literals/comments are ignored), `run_query(cur, sql,

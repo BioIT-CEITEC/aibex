@@ -119,6 +119,11 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
 
 ## Spec validation rules (422 / `valid: false` when violated)
 - panel ids unique, kebab-case; every panel has exactly one layout item and every layout item a panel
+- structural (`aibex/spec.py`): unknown fields are rejected (typos become repairable errors); filter ids unique and
+  kebab-case; axis/`color`/`size` have exactly one of `field`/`expr`; `color` has `palette` or `colorscale`, not both;
+  filter `between` needs `[min, max]`, `in` a non-empty list, `contains` a string; layout items fit the 12-column grid
+  (`x + w ≤ 12`, `w,h ≥ 1`; react-grid-layout flags `static`/`moved`/`min*`/`max*` allowed); `pca` scale `none|log1p`,
+  `heatmap` needs `rows`; widget `language` is `tsx` (default) or `jsx`
 - `table` / `field` references must exist in the bundle schema (`expr` columns too); filter `field`s too
 - `expr` grammar (decided, Q1): column names, numbers, single-quoted string literals, `NULL`, `TRUE`, `FALSE`, unary minus,
   `+ - * / ( )`, comparisons `< <= > >= = != <>`, `AND OR NOT`, `IS [NOT] NULL`, `CASE WHEN … THEN … [ELSE …] END`, and the
