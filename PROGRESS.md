@@ -13,7 +13,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T03 Answer the open questions Q1–Q9 (answers in the Log; docs and tests updated) – Vojta
 
 ## Phase 1 – bundles + dashboard
-- [ ] T10 `create_app()` factory + `Settings.llm_provider` per docs/api.md; keep `app = create_app()`; `make test` passes
+- [x] T10 `create_app()` factory + `Settings.llm_provider` per docs/api.md; keep `app = create_app()`; `make test` passes
 - [ ] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
 - [ ] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
 - [ ] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
@@ -70,6 +70,18 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T10 · done · `create_app(settings, llm_provider)` factory (state on `app.state`, routes on an `/api`
+  router, `app = create_app()` kept); `Settings` reads env at instantiation (not import), new `llm_provider`
+  (`openai` default | `fake`, validated), `/health` also reports `llm_provider` (docs/api.md updated). Provider
+  construction from settings is left to T21a/T21b. Tests: `tests/test_app_factory.py` (8). Phase-1 acceptance: factory
+  fixture works; remaining failures are 404s of T11+ endpoints (expected).
+  **Environment issue for Vojta:** in the overnight runner the shell runs as x86_64 (Rosetta) while `backend/.venv`
+  has arm64 wheels → `make test` fails at `import pydantic_core` (incompatible architecture). Not caused by code; I did
+  not rebuild your `.venv`. Workaround used (ruff via `make test` passed, then):
+  `uv run --directory backend --isolated --python cpython-3.12-macos-aarch64 pytest ...` (arm64-only uv-managed
+  Python, ephemeral env, `.venv` untouched). Fix: start `scripts/overnight.sh` from a native arm64 terminal
+  (check `arch` → `arm64`; maybe the terminal app/`claude` binary runs under Rosetta), or pin the project to a
+  uv-managed arm64 Python. Also `uname`/`arch`/pipes with `;` are not in the runner allow-list.
 
 ### Decisions (Vojta, 2026-11-21) – answers to Q1–Q9
 - **Q1 expr grammar:** yes to both – comparisons, `AND/OR/NOT`, string literals, `CASE WHEN` in `expr`; filters may use a

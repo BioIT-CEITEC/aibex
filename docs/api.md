@@ -62,7 +62,7 @@ class LLMProvider(Protocol):
 ## REST endpoints (all JSON, prefix `/api`)
 | method | path | body | response |
 |---|---|---|---|
-| GET | `/health` | – | `{status, version, llm_configured, llm_models, data_dir_exists}` |
+| GET | `/health` | – | `{status, version, llm_provider, llm_configured, llm_models, data_dir_exists}` |
 | GET | `/bundles` | – | `[{id, title, modalities, tables}]`; an entry with a broken bundle.yaml is `{id, error}` |
 | GET | `/bundles/{id}/schema` | – | `{id, title, organism?, tables: {name: {description, key, row_count, columns: {col: {type, description?}}}}, links: [{from, to}]}` (404 unknown bundle) |
 | POST | `/bundles/{id}/query` | `{sql, limit?}` | `{columns, rows, row_count, truncated}` – read-only single SELECT/WITH, else **400** |
