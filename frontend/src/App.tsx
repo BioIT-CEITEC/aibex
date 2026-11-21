@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BundleSelect } from '@/components/BundleSelect';
 import { Dashboard } from '@/components/Dashboard';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { FiltersBar } from '@/components/FiltersBar';
 import { useAppStore } from '@/store';
 
 // App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
@@ -33,7 +34,10 @@ export default function App() {
         {loading && !spec ? (
           <p className="text-sm text-muted-foreground">Opening bundle…</p>
         ) : spec ? (
-          <Dashboard spec={spec} />
+          <>
+            <FiltersBar filters={spec.filters ?? []} />
+            <Dashboard spec={spec} />
+          </>
         ) : null}
       </main>
     </div>

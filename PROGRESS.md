@@ -28,7 +28,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
 - [x] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
 - [x] T17c PCA + heatmap rendering (after: T15c, T17b)
-- [ ] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
+- [x] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
 - [ ] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
 - [ ] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
 - [ ] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline (after: T11)
@@ -70,6 +70,16 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T17d · done · `src/components/FiltersBar.tsx` above the grid (hidden when the spec has no filters): one
+  checkbox `filter-<id>` per spec filter, text = `label` or `field op value` / `expr` (tooltip: table + raw
+  condition), disabled filters struck through. Toggle → `applyPatch([test /filters/i/id, add /filters/i/enabled])`
+  (source `user`, summary "enable/disable filter <id>"; `test` guards against a concurrent list change, `add` also
+  works when `enabled` was omitted). Optimistic checkbox state until the response (Playwright `check()` needs the
+  immediate flip); on failure it reverts and the error banner shows. New e2e `e2e/filters.spec.ts`: intercepts
+  `POST /api/sessions`, adds a filter to the fresh backend session via `/patch`, then off → version 2 and more table
+  rows, on → version 3 and the filtered count again. Checks: `make test` 290 pass + typecheck/lint clean; phase-1
+  acceptance 34 pass; `make e2e` 9 pass (dashboard, table, plot, matrix, filters); chat E2.* and widget E4.1 fail as
+  expected (T24a/T41b). Screenshot `logs/screens/T17d-filters.png`. No new dependencies.
 - 2026-11-21 · T17c · done · `src/lib/plotFigure.ts`: `buildPcaFigure` (PC1/PC2 with explained-variance titles from
   panel-data, sample names as point text up to 40 samples, colour by `color.field` = samples.tsv column –
   categorical with spec palette/legend or numeric colour scale; hover shows sample + all annotation columns; sample
