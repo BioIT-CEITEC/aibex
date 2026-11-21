@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import { BundleSelect } from '@/components/BundleSelect';
+import { Dashboard } from '@/components/Dashboard';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAppStore } from '@/store';
 
 // App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
-// The panel grid (T17a+), chat (T24a) and history/undo (T24b) plug into the main area.
+// The main area is the panel grid (T17a); chat (T24a) and history/undo (T24b) plug in next to it.
 export default function App() {
   const bootstrap = useAppStore((s) => s.bootstrap);
   const spec = useAppStore((s) => s.spec);
@@ -32,18 +33,7 @@ export default function App() {
         {loading && !spec ? (
           <p className="text-sm text-muted-foreground">Opening bundle…</p>
         ) : spec ? (
-          <section className="text-sm">
-            <p className="mb-2 text-muted-foreground">
-              {spec.panels.length} panels in the view spec (the dashboard grid is not built yet):
-            </p>
-            <ul className="list-inside list-disc">
-              {spec.panels.map((p) => (
-                <li key={p.id}>
-                  {p.title || p.id} <span className="text-muted-foreground">({p.type === 'plot' ? p.kind : p.type})</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+          <Dashboard spec={spec} />
         ) : null}
       </main>
     </div>

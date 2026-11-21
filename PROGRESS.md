@@ -25,7 +25,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
 - [x] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
 - [x] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
-- [ ] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
+- [x] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
 - [ ] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
 - [ ] T17c PCA + heatmap rendering (after: T15c, T17b)
 - [ ] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
@@ -70,6 +70,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T17a · done · `src/components/Dashboard.tsx`: react-grid-layout v2 (`ReactGridLayout` +
+  `useContainerWidth`, 12 cols, rowHeight 40, margin 12) rendered only from `spec.layout`; drag/resize disabled until
+  T17e (handle class `.panel-drag-handle` on the title bar is ready). `panels/PanelFrame.tsx`: card `panel-<id>` with
+  title, kind, `loading…`, per-panel error + Retry (one broken panel never breaks the dashboard), body per type
+  (table; text as plain pre-wrap text; plot/widget = honest placeholders until T17b/T41a). `lib/usePanelData.ts`:
+  panel-data fetch keyed by session + panel spec + filters (refetch only on relevant change, stale results dropped,
+  old data kept while refetching). `panels/TablePanel.tsx` (`table-<id>`): spec columns (backend-appended key hidden),
+  click header → local sort asc/desc/spec order (nulls last, numeric collation; view state, not a patch), paging by
+  `page_size` (default 25), row count + "first 5000 loaded" when truncated. New dependency `react-grid-layout` ^2.3
+  (grid, planned in CLAUDE.md; ships its own types). New e2e `e2e/table.spec.ts` (frames, table rows, paging, sort).
+  Checks: `make test` 290 pass + typecheck/lint clean; phase-1 acceptance 34 pass; e2e: table spec, E1.2, E1.3 pass,
+  E1.1 now passes the ≥4-panel check and fails only at `.js-plotly-plot` (T17b, expected). Screenshot
+  `logs/screens/T17a-grid.png` (1440 wide).
 - 2026-11-21 · T16c · done · `src/lib/types.ts` (TS mirror of the spec + REST payloads), `src/lib/api.ts` (typed
   client for all current endpoints, `ApiError` with the backend's `detail` / 422 `detail.errors`, "backend unreachable"
   on network errors), `src/store.ts` (zustand: bundles, session, spec, version, history, loading/busy, error;
