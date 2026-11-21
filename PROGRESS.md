@@ -22,7 +22,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
 - [x] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
 - [x] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
-- [ ] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
+- [x] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
 - [ ] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
 - [ ] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
 - [ ] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
@@ -70,6 +70,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T16a · done · `frontend/` written by hand (no `npm create`): Vite 8 + React 19 + TS 6.0 (pinned
+  `~6.0.3` because typescript-eslint 8 needs TS < 6.1; TS 7 is out) + Tailwind 4 via `@tailwindcss/vite` (no
+  tailwind.config, theme tokens in `src/index.css`) + shadcn/ui base (`components.json` new-york/neutral, `cn()` in
+  `src/lib/utils.ts`, `@/` alias, a Button without the Radix Slot dependency). ESLint 10 flat config
+  (typescript-eslint, react-hooks 7, react-refresh), `--max-warnings 0`; scripts `dev`/`build`/`typecheck` (`tsc -b`)
+  /`lint`; `/api` proxy → 8000 on port 5173. `engines.node >=22.12` (Vite 8 needs it; the cluster build image is
+  node:22). Placeholder page shows `/api/health` with a Retry button. `e2e/` and `playwright.config.ts` are already
+  ignored by ESLint for T16b. New dependencies (all standard scaffold): react, react-dom, clsx + tailwind-merge +
+  class-variance-authority (shadcn base); dev: vite, @vitejs/plugin-react, tailwindcss, @tailwindcss/vite,
+  typescript, @types/*, eslint + plugins, globals. Checks: `make test` 290 pass + typecheck/lint clean; `npm run
+  build` ok (dist 251 kB JS); phase-1 acceptance 34 pass. **No screenshot:** starting uvicorn/vite in the background
+  is refused by the runner (dontAsk), so the visual check waits for `make e2e` in T16b (Playwright starts the servers
+  itself) – Vojta: allow background `uv run uvicorn` / `npx vite` if the agent should screenshot by itself.
 - 2026-11-21 · T15c · done · `aibex/matrix_panels.py`: `pca` (filters → drop rows with NULL → `log1p`/`none` →
   top_n most variable rows (default 500) → centre → eigendecomposition of the samples × samples Gram matrix with a
   pure-Python Jacobi solver, no numpy) returns `x`, `y`, `sample` + samples.tsv columns and `x_label`/`y_label`
