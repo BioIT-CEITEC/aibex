@@ -188,3 +188,11 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   `chat-message` (assistant messages), `spec-version` (text = current version number), `history-item`, `undo-button`,
   `redo-button`, `widget-frame-<id>` (the iframe; attribute `sandbox="allow-scripts"` exactly), `error-banner`.
 - Toggling a filter checkbox or dragging/resizing a panel sends a patch with `source: "user"` (a new, undoable version).
+  Drag/resize (title bar / bottom-right corner) patches only the changed `x/y/w/h` of every moved item, each guarded by
+  a `test` on `/layout/<k>/i`; summary `move|resize panel <id> (+n shifted)`.
+- Linked selection (T17e) is view state in the frontend store, not part of the spec (no version). It holds values of
+  `spec.selection.key` (off when `selection` is missing or `linked: false`). A panel takes part when its panel-data has
+  a column of that name: table rows (click; shift/ctrl/cmd-click toggles; selected rows `data-selected`, listed first),
+  scatter/line/bar points (click, box/lasso; others fade, selected get a ring). Heatmap rows are treated as values of
+  the key (matrix key, e.g. `gene_id`): click selects the row, selected rows are outlined. PCA (samples) does not take
+  part. Header shows `selection-bar` with `selection-clear`; a new session clears the selection.

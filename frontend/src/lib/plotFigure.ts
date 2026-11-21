@@ -432,6 +432,82 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
   return applyOverrides({ data: traces, layout }, panel.plotly);
 }
 
+/** Plot kinds whose points carry the table key (`customdata`) and so take part in linked selection. */
+export function isSelectablePlot(panel: PlotPanel): boolean {
+  return panel.kind === 'scatter' || panel.kind === 'line' || panel.kind === 'bar' || panel.kind === 'heatmap';
+}
+
+const SELECTED_RING = { size: 13, color: 'rgba(0,0,0,0)', line: { width: 2, color: '#111' } };
+
+/**
+ * Linked selection (T17e): returns a copy of `fig` with the selected keys highlighted. Point traces keep the
+ * selected points opaque and fade the rest (Plotly `selectedpoints`), scatter/line points also get a dark ring;
+ * heatmaps outline the selected rows and bold their labels. No selection → the figure is returned unchanged.
+ */
+export function highlightSelection(panel: PlotPanel, fig: Figure, selected: ReadonlySet<string>): Figure {
+  if (!selected.size || !isSelectablePlot(panel)) return fig;
+
+  if (panel.kind === 'heatmap') {
+    const trace = fig.data[0];
+    const rows = (trace?.y as string[] | undefined) ?? [];
+    const hits = rows.map((r, k) => (selected.has(r) ? k : -1)).filter((k) => k >= 0);
+    if (!hits.length) return fig;
+    const yaxis = (fig.layout.yaxis as Record<string, unknown>) ?? {};
+    const shapes = [
+      ...((fig.layout.shapes as unknown[]) ?? []),
+      ...hits.map((k) => ({
+        type: 'rect',
+        xref: 'paper',
+        yref: 'y',
+        x0: 0,
+        x1: 1,
+        y0: k - 0.5,
+        y1: k + 0.5,
+        line: { width: 2, color: '#111' },
+        fillcolor: 'rgba(0,0,0,0)',
+      })),
+    ];
+    return {
+      data: fig.data,
+      layout: {
+        ...fig.layout,
+        shapes,
+        yaxis: { ...yaxis, tickmode: 'array', tickvals: rows, ticktext: rows.map((r) => (selected.has(r) ? `<b>${r}</b>` : r)) },
+      },
+    };
+  }
+
+  const data: Trace[] = [];
+  const rings: Trace[] = [];
+  for (const t of fig.data) {
+    const keys = t.customdata as JsonValue[] | undefined;
+    if (!Array.isArray(keys)) {
+      data.push(t);
+      continue;
+    }
+    const idx: number[] = [];
+    keys.forEach((k, i) => {
+      if (k !== null && selected.has(String(k))) idx.push(i);
+    });
+    data.push({ ...t, selectedpoints: idx, selected: { marker: { opacity: 1 } }, unselected: { marker: { opacity: 0.25 } } });
+    if (idx.length && t.type !== 'bar') {
+      const xs = t.x as JsonValue[] | undefined;
+      const ys = t.y as JsonValue[] | undefined;
+      rings.push({
+        type: t.type,
+        mode: 'markers',
+        x: idx.map((i) => xs?.[i] ?? null),
+        y: idx.map((i) => ys?.[i] ?? null),
+        marker: SELECTED_RING,
+        hoverinfo: 'skip',
+        showlegend: false,
+        name: 'selected',
+      });
+    }
+  }
+  return { data: [...data, ...rings], layout: fig.layout };
+}
+
 function cmp(a: JsonValue, b: JsonValue): number {
   if (a === null || a === undefined) return 1;
   if (b === null || b === undefined) return -1;

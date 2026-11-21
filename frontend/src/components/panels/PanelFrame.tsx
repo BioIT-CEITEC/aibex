@@ -10,7 +10,7 @@ function needsData(panel: Panel): boolean {
 }
 
 /**
- * Card around one panel (`panel-<id>`): title bar (also the drag handle once T17e enables dragging), loading /
+ * Card around one panel (`panel-<id>`): title bar (also the drag handle), loading /
  * error state with Retry, and the body for the panel type. Errors stay inside the panel – one broken panel never
  * takes the dashboard down.
  */
@@ -18,10 +18,13 @@ export function PanelFrame({
   panel,
   sessionId,
   filters,
+  selectionKey,
 }: {
   panel: Panel;
   sessionId: string | null;
   filters: Filter[] | undefined;
+  /** `spec.selection.key` when linked selection is on, else null. */
+  selectionKey: string | null;
 }) {
   const state = usePanelData(needsData(panel) ? sessionId : null, panel, filters);
   const kind = panel.type === 'plot' ? panel.kind : panel.type;
@@ -31,7 +34,10 @@ export function PanelFrame({
       data-testid={`panel-${panel.id}`}
       className="flex h-full flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-xs"
     >
-      <div className="panel-drag-handle flex items-center gap-2 border-b px-3 py-1.5" title={panel.description}>
+      <div
+        className="panel-drag-handle flex cursor-move items-center gap-2 border-b px-3 py-1.5"
+        title={panel.description ? `${panel.description} – drag to move` : 'Drag to move; resize at the bottom-right corner'}
+      >
         <h2 className="truncate text-sm font-medium">{panel.title || panel.id}</h2>
         <span className="text-xs text-muted-foreground">{kind}</span>
         {state.loading && <span className="ml-auto text-xs text-muted-foreground">loading…</span>}
@@ -45,21 +51,29 @@ export function PanelFrame({
             </Button>
           </div>
         ) : (
-          <PanelBody panel={panel} state={state} />
+          <PanelBody panel={panel} state={state} selectionKey={selectionKey} />
         )}
       </div>
     </div>
   );
 }
 
-function PanelBody({ panel, state }: { panel: Panel; state: ReturnType<typeof usePanelData> }) {
+function PanelBody({
+  panel,
+  state,
+  selectionKey,
+}: {
+  panel: Panel;
+  state: ReturnType<typeof usePanelData>;
+  selectionKey: string | null;
+}) {
   switch (panel.type) {
     case 'table':
-      return <TablePanel panel={panel} state={state} />;
+      return <TablePanel panel={panel} state={state} selectionKey={selectionKey} />;
     case 'text':
       return <div className="h-full overflow-auto text-sm whitespace-pre-wrap">{panel.markdown}</div>;
     case 'plot':
-      return <PlotPanel panel={panel} state={state} />;
+      return <PlotPanel panel={panel} state={state} selectionKey={selectionKey} />;
     case 'widget':
       return <p className="text-xs text-muted-foreground">Custom widget – the sandboxed runtime is not built yet.</p>;
   }

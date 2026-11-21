@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { compareCells, formatCell } from '@/lib/format';
 import type { PanelDataState } from '@/lib/usePanelData';
-import type { TablePanel as TablePanelSpec } from '@/lib/types';
+import type { JsonValue, TablePanel as TablePanelSpec } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { useAppStore } from '@/store';
 
 interface SortState {
   col: string;
@@ -16,11 +17,29 @@ interface SortState {
  * Columns: the spec's `columns` when listed (the backend appends the key column for linked selection – hidden
  * here), else every returned column.
  */
-export function TablePanel({ panel, state }: { panel: TablePanelSpec; state: PanelDataState }) {
+export function TablePanel({
+  panel,
+  state,
+  selectionKey,
+}: {
+  panel: TablePanelSpec;
+  state: PanelDataState;
+  selectionKey: string | null;
+}) {
   const { data } = state;
   const pageSize = Math.max(1, panel.page_size ?? 25);
   const [sort, setSort] = useState<SortState | null>(null);
-  const [page, setPage] = useState(0);
+  const selection = useAppStore((s) => s.selection);
+  // the page belongs to the selection it was chosen under; a new selection jumps back to the first page
+  // (selected rows are listed first)
+  const [paging, setPaging] = useState({ page: 0, selection });
+  const page = paging.selection === selection ? paging.page : 0;
+  const setPage = (p: number) => setPaging({ page: p, selection });
+  const select = useAppStore((s) => s.select);
+  const selected = useMemo(() => new Set(selection), [selection]);
+  // linked selection (T17e): only when this table's rows carry the spec's selection key
+  const keyIdx = data && selectionKey ? data.columns.indexOf(selectionKey) : -1;
+  const keyOf = (row: JsonValue[]) => (keyIdx >= 0 && row[keyIdx] !== null ? String(row[keyIdx]) : null);
 
   const visible = useMemo(() => {
     if (!data) return [];
@@ -31,9 +50,16 @@ export function TablePanel({ panel, state }: { panel: TablePanelSpec; state: Pan
   const rows = useMemo(() => {
     if (!data) return [];
     const i = sort ? data.columns.indexOf(sort.col) : -1;
-    if (!sort || i < 0) return data.rows;
-    return [...data.rows].sort((a, b) => compareCells(a[i], b[i], sort.dir));
-  }, [data, sort]);
+    const sorted = !sort || i < 0 ? data.rows : [...data.rows].sort((a, b) => compareCells(a[i], b[i], sort.dir));
+    if (keyIdx < 0 || !selected.size) return sorted;
+    // selected rows first (a selection made in a plot may sit on any page), otherwise the order is kept
+    const hit = (r: JsonValue[]) => r[keyIdx] !== null && selected.has(String(r[keyIdx]));
+    return [...sorted.filter(hit), ...sorted.filter((r) => !hit(r))];
+  }, [data, sort, keyIdx, selected]);
+  const nSelected = useMemo(
+    () => (keyIdx < 0 ? 0 : rows.filter((r) => r[keyIdx] !== null && selected.has(String(r[keyIdx]))).length),
+    [rows, keyIdx, selected],
+  );
 
   if (!data) return null;
   const numeric = (i: number) => typeof data.rows.find((r) => r[i] !== null)?.[i] === 'number';
@@ -80,8 +106,29 @@ export function TablePanel({ panel, state }: { panel: TablePanelSpec; state: Pan
             </tr>
           </thead>
           <tbody>
-            {shown.map((row, r) => (
-              <tr key={current * pageSize + r} className="odd:bg-muted/40 hover:bg-accent">
+            {shown.map((row, r) => {
+              const key = keyOf(row);
+              const isSel = key !== null && selected.has(key);
+              return (
+              <tr
+                key={current * pageSize + r}
+                data-selected={isSel || undefined}
+                className={cn(
+                  'odd:bg-muted/40 hover:bg-accent',
+                  key !== null && 'cursor-pointer',
+                  isSel && 'bg-amber-100 font-medium odd:bg-amber-100 hover:bg-amber-200',
+                )}
+                title={key !== null ? 'Click to select (shift/ctrl-click: add or remove)' : undefined}
+                onClick={
+                  key === null
+                    ? undefined
+                    : (e) => {
+                        if (e.shiftKey || e.ctrlKey || e.metaKey) select([key], 'toggle');
+                        // plain click on the only selected row clears the selection
+                        else select(isSel && selected.size === 1 ? [] : [key]);
+                      }
+                }
+              >
                 {visible.map((i) => (
                   <td
                     key={data.columns[i]}
@@ -94,7 +141,8 @@ export function TablePanel({ panel, state }: { panel: TablePanelSpec; state: Pan
                   </td>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         {rows.length === 0 && <p className="p-2 text-xs text-muted-foreground">No rows match the current filters.</p>}
@@ -103,6 +151,7 @@ export function TablePanel({ panel, state }: { panel: TablePanelSpec; state: Pan
         <span>
           {rows.length} rows{data.truncated && ' (first 5000 loaded)'}
         </span>
+        {nSelected > 0 && <span className="font-medium text-foreground">{nSelected} selected (shown first)</span>}
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"

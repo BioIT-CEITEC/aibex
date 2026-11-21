@@ -3,6 +3,7 @@ import { BundleSelect } from '@/components/BundleSelect';
 import { Dashboard } from '@/components/Dashboard';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FiltersBar } from '@/components/FiltersBar';
+import { SelectionBar } from '@/components/SelectionBar';
 import { useAppStore } from '@/store';
 
 // App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
@@ -22,7 +23,8 @@ export default function App() {
       <header className="flex items-center gap-4 border-b px-4 py-2">
         <h1 className="text-lg font-semibold">Aibex View</h1>
         <span className="truncate text-sm text-muted-foreground">{spec?.title}</span>
-        <div className="ml-auto flex items-center gap-4">
+        <SelectionBar selectionKey={spec?.selection && spec.selection.linked !== false ? spec.selection.key : null} />
+        <div className="ml-auto flex shrink-0 items-center gap-4">
           <BundleSelect />
           <span className="text-sm text-muted-foreground">
             version <span data-testid="spec-version">{version ?? '–'}</span>

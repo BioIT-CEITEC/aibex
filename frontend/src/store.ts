@@ -23,7 +23,14 @@ interface AppState {
   /** True while a patch/undo/redo request is in flight. */
   busy: boolean;
   error: AppError | null;
+  /**
+   * Linked selection (T17e): values of `spec.selection.key` selected in any panel. View state, not part of the spec
+   * (no new version); cleared when a new session starts.
+   */
+  selection: string[];
 
+  /** Replace the selection, or toggle `keys` in/out of it (shift/ctrl/cmd-click). */
+  select: (keys: string[], mode?: 'replace' | 'toggle') => void;
   /** Load the bundle list and start a session for `requested` (or the first bundle). */
   bootstrap: (requested: string | null) => Promise<void>;
   /** Switch bundle: new session (version 0), URL `?bundle=` updated. */
@@ -51,7 +58,7 @@ function setBundleParam(bundleId: string) {
 export const useAppStore = create<AppState>()((set, get) => {
   const startSession = async (bundleId: string) => {
     const seq = ++sessionSeq;
-    set({ loading: true, error: null, bundleId });
+    set({ loading: true, error: null, bundleId, selection: [] });
     try {
       const created = await api.createSession(bundleId);
       if (seq !== sessionSeq) return;
@@ -115,6 +122,20 @@ export const useAppStore = create<AppState>()((set, get) => {
     loading: true,
     busy: false,
     error: null,
+    selection: [],
+
+    select: (keys, mode = 'replace') => {
+      const unique = [...new Set(keys)];
+      if (mode === 'replace') return set({ selection: unique });
+      const current = new Set(get().selection);
+      // toggle as a group: if every key is already selected remove them, else add the missing ones
+      const allIn = unique.length > 0 && unique.every((k) => current.has(k));
+      for (const k of unique) {
+        if (allIn) current.delete(k);
+        else current.add(k);
+      }
+      set({ selection: [...current] });
+    },
 
     bootstrap: async (requested) => {
       set({ loading: true, error: null });

@@ -29,7 +29,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
 - [x] T17c PCA + heatmap rendering (after: T15c, T17b)
 - [x] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
-- [ ] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
+- [x] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
 - [ ] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
 - [ ] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline (after: T11)
 
@@ -70,6 +70,23 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T17e · done · Linked selection = view state in the zustand store (`selection: string[]`, `select(keys,
+  'replace'|'toggle')`, cleared on a new session; no spec version). Key = `spec.selection.key` (off without it or with
+  `linked: false`); a panel joins when its panel-data has that column. Table: click row (shift/ctrl/cmd toggles; plain
+  click on the only selected row clears), selected rows amber + `data-selected`, listed first, page resets, footer "N
+  selected". Plots (`highlightSelection` in `plotFigure.ts`): scatter/line/bar via Plotly `selectedpoints` (others at
+  0.25 opacity) + a dark ring trace; click, shift-click, box/lasso (select tools re-enabled on linked plots),
+  double-click deselect clears; `uirevision` = panel spec, so zoom survives selection redraws. Heatmap: click a cell
+  selects its row (assumes matrix key = selection key, true for gene_id), selected rows outlined + bold label. PCA
+  (samples) does not join. Header `selection-bar` + `selection-clear`. Layout: drag by the title bar / resize at the
+  corner → `lib/layoutPatch.ts` patches the changed `x/y/w/h` with a `test` on each item id (source `user`, summary
+  "move|resize panel <id> (+n shifted)"); the dropped layout is shown until the backend answers, snaps back on 422.
+  Note: RGL vertical compaction may shift other panels (all are in the same patch, one undo). Editing panels keyed
+  by `site_id` won't join a `gene_id` selection – T32 may add `gene_id` to their panel-data. New e2e
+  `e2e/selection.spec.ts` (table→plot, shift-click, Clear, plot click→table; drag + resize → versions 1/2 with user
+  history; title click = no patch); stable with `--repeat-each=4`. docs/api.md updated. Checks: `make test` 290 pass
+  + typecheck/lint clean; phase-1 acceptance 34 pass; `make e2e` 11 pass, chat E2.* and widget E4.1 fail as expected
+  (T24a/T41b). Screenshots `logs/screens/T17e-selection.png`, `T17e-layout.png`. No new dependencies.
 - 2026-11-22 · T17d · done · `src/components/FiltersBar.tsx` above the grid (hidden when the spec has no filters): one
   checkbox `filter-<id>` per spec filter, text = `label` or `field op value` / `expr` (tooltip: table + raw
   condition), disabled filters struck through. Toggle → `applyPatch([test /filters/i/id, add /filters/i/enabled])`
