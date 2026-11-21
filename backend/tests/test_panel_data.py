@@ -202,8 +202,9 @@ def test_text_panel_empty_unknown_panel_and_unsupported(bundle):
     assert panel_data(spec, bundle, "notes") == {"columns": [], "rows": [], "truncated": False}
     with pytest.raises(PanelNotFound):
         panel_data(spec, bundle, "nope")
-    with pytest.raises(PanelDataUnsupported):
-        panel_data(spec, bundle, "pca")
+    # pca/heatmap are implemented since T15c (tests/test_matrix_panels.py); widgets still answer 501 (T40a)
+    assert panel_data(spec, bundle, "pca")["columns"][:3] == ["x", "y", "sample"]
+    assert issubclass(PanelDataUnsupported, ValueError)
 
 
 # --- endpoint --------------------------------------------------------------------------------------------------

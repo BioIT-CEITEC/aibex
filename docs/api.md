@@ -117,8 +117,14 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   (`values` matched case-insensitively, or the `top_n` rows ascending by `by` among the filtered rows), else null;
   labelled rows come first so the 5000-row cap never drops them; `facet` is returned as column `facet` when set.
   Table panels append the table key column at the end when it is not listed (needed for linked selection); rows are
-  ordered by the key after the spec's `sort`. `text` panels return empty data. Not yet implemented: `pca`/`heatmap`
-  (T15c) and `widget` (T40a) answer **501**; `selection` is accepted but only used by widget inputs. A failing panel
+  ordered by the key after the spec's `sort`. `text` panels return empty data. `pca`/`heatmap`
+  (`aibex/matrix_panels.py`): filters reach the matrix rows like any panel; PCA drops rows with a missing value, scales,
+  keeps the `top_n` most variable rows, centres them and projects the samples (columns in samples.tsv order; PC sign
+  fixed so the largest loading is positive; fewer than 2 varying rows → 400). Heatmap `row` is the matrix key; explicit
+  `values` match the key case-insensitively and keep their order; `top_n` ranks by `min(<by column>)` per linked key,
+  ties by key; `row-z` uses the sample SD (SD 0 → 0); columns are grouped by `group_by` (first appearance) keeping
+  samples.tsv order; only whole rows fit under the 5000-row cap (`truncated: true`). Not yet implemented:
+  `widget` (T40a) answers **501**; `selection` is accepted but only used by widget inputs. A failing panel
   query answers **400** `{detail}`. In `expr`, `log`/`log2`/`log10`/`ln` of values ≤ 0 and `sqrt` of negative values
   give null instead of a DuckDB error (e.g. `-log10(padj)` with `padj = 0`).
 - `widget` panels return `{inputs: {name: {columns, rows, truncated}}}` instead; each input max 5000 rows; `$selected` in

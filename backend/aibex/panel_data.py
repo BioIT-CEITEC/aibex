@@ -9,7 +9,8 @@ quoted, `expr`s are compiled by aibex/expr.py (the raw string never runs) and fi
   Labelled rows come first so the 5000-row cap never drops them.
 - `table` panels: the listed columns (all when omitted) in order, plus the key column at the end when not listed;
   sorted as specified, then by the key.
-- `pca` / `heatmap` panels: task T15c; `widget` panels: task T40a (raise `PanelDataUnsupported`).
+- `pca` / `heatmap` panels: computed from the matrix table in aibex/matrix_panels.py (filters applied first);
+  `widget` panels: task T40a (raise `PanelDataUnsupported`).
 - `text` panels have no data (empty result).
 
 A filter applies to panels on its own table and, one hop through a bundle link in either direction, to panels on
@@ -24,6 +25,7 @@ import duckdb
 
 from aibex.bundles import Bundle
 from aibex.expr import compile_expr
+from aibex.matrix_panels import MatrixPanelError, heatmap_data, pca_data
 from aibex.query import jsonable
 from aibex.spec import Filter, PlotPanel, Spec, TablePanel, TextPanel
 
@@ -164,12 +166,18 @@ def panel_data(spec: Spec, bundle: Bundle, panel_id: str) -> dict:
         raise PanelNotFound(panel_id)
     if isinstance(panel, TextPanel):
         return {"columns": [], "rows": [], "truncated": False}
-    if isinstance(panel, PlotPanel) and panel.kind in ("pca", "heatmap"):
-        raise PanelDataUnsupported(f"panel data for {panel.kind} panels is not implemented yet (task T15c)")
     if not isinstance(panel, (PlotPanel, TablePanel)):
         raise PanelDataUnsupported(f"panel data for {panel.type} panels is not implemented yet (task T40a)")
     if panel.table not in bundle.tables:
         raise PanelDataError(f"unknown table {panel.table!r}")
+    if isinstance(panel, PlotPanel) and panel.kind in ("pca", "heatmap"):
+        conds, where_params = filter_where(spec, bundle, panel.table)
+        try:
+            if panel.kind == "pca":
+                return pca_data(bundle, panel, conds, where_params)
+            return heatmap_data(bundle, panel, conds, where_params, _link_columns)
+        except MatrixPanelError as exc:
+            raise PanelDataError(f"panel {panel_id!r}: {exc}") from None
 
     key = bundle.tables[panel.table].get("key")
     if isinstance(panel, PlotPanel):
