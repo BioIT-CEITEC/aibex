@@ -64,7 +64,14 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
 - An axis (and `color`, `size`) is either `{"field": ...}` or `{"expr": ...}`. `expr` is a restricted DuckDB SQL expression over the table's columns, validated server-side. The grammar (allowed operators and functions) is defined once in `docs/api.md` → "Spec validation rules".
 - `color` may carry a `palette` (`{value: colour}`, categorical) or a `colorscale` (Plotly name, continuous).
 - `label`: `values` are labelled explicitly; `top_n` + `by` label the top rows by a column (ascending). The first scatter of a generated default view always has a `label` object (possibly with empty `values`).
-- `plotly` holds optional raw Plotly layout/trace overrides (escape hatch; validated to be plain JSON).
+- `plotly` holds optional raw Plotly layout/trace overrides (escape hatch; validated to be plain JSON). The frontend
+  deep-merges `plotly.layout` and every other top-level key into the Plotly layout, and `plotly.trace` into every trace,
+  e.g. `{"layout": {"yaxis": {"type": "log"}}, "trace": {"marker": {"opacity": 0.5}}}`.
+- Rendering (frontend, `src/lib/plotFigure.ts`): a numeric `color` on scatter/line → continuous colour scale with a
+  colour bar (`colorscale`, default Viridis); otherwise one trace per colour value (legend; `palette` keys match the
+  value exactly, unknown values get the default colourway). The legend title is `color.label` or `color.field`, never
+  an `expr`. `size` scales markers to 4–16 px (scatter). Rows with a `label` text are annotated (max 60).
+  Above 1500 points scatter/line use WebGL. `facet` is not drawn yet.
 
 ### `pca`
 ```json

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { usePanelData } from '@/lib/usePanelData';
 import type { Filter, Panel } from '@/lib/types';
+import { PlotPanel } from './PlotPanel';
 import { TablePanel } from './TablePanel';
 
 /** Panels whose data come from `panel-data` (text needs none; widgets get theirs in T40a/T41a). */
@@ -58,13 +59,7 @@ function PanelBody({ panel, state }: { panel: Panel; state: ReturnType<typeof us
     case 'text':
       return <div className="h-full overflow-auto text-sm whitespace-pre-wrap">{panel.markdown}</div>;
     case 'plot':
-      // placeholder until the Plotly renderer (T17b / T17c)
-      return (
-        <p className="text-xs text-muted-foreground">
-          {state.data ? `${state.data.rows.length} data rows loaded – ` : ''}plot rendering comes with the next build
-          step.
-        </p>
-      );
+      return <PlotPanel panel={panel} state={state} />;
     case 'widget':
       return <p className="text-xs text-muted-foreground">Custom widget – the sandboxed runtime is not built yet.</p>;
   }

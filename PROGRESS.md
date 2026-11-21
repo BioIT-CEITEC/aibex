@@ -26,7 +26,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
 - [x] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
 - [x] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
-- [ ] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
+- [x] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
 - [ ] T17c PCA + heatmap rendering (after: T15c, T17b)
 - [ ] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
 - [ ] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
@@ -70,6 +70,21 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T17b · done · `src/lib/plotFigure.ts`: pure `buildFigure(panel, panelData)` → Plotly traces + layout
+  for scatter/line (x-sorted)/bar/histogram/box/violin; categorical colour = one trace per value with the spec
+  `palette` (legend above the plot, titled by `color.label`/`field`, never a raw `expr`), numeric colour on
+  scatter/line = colour scale + colour bar; `size` → 4–16 px markers; `label` rows → annotations (max 60, staggered);
+  table key in `customdata` (ready for T17e selection); `scattergl` above 1500 points; `plotly` escape hatch:
+  `plotly.layout` + other top-level keys merge into the layout, `plotly.trace` into every trace (documented in
+  docs/spec-format.md). `panels/PlotlyChart.tsx`: thin wrapper over `Plotly.react` (lazy `import()` → Plotly is its
+  own 4.6 MB chunk, app shell 344 kB; ResizeObserver resize, purge on unmount, draw errors shown in the panel).
+  `panels/PlotPanel.tsx` (`plot-<id>`); pca/heatmap keep an honest placeholder (T17c); `facet` is not drawn yet.
+  **Deviation:** used `plotly.js-dist-min` ^4.3 (ships its own types) with an own ~60-line wrapper instead of
+  react-plotly.js – its plotly.js peer dependency pulled ~220 extra packages and it is unmaintained; swap back if you
+  prefer. New dependency: `plotly.js-dist-min` (plots). New e2e `e2e/plot.spec.ts` (volcano + MA scatter with legend
+  groups; annotations via an intercepted panel-data response). Checks: `make test` 290 pass + typecheck/lint clean;
+  phase-1 acceptance 34 pass; `make e2e`: dashboard E1.1–E1.3, table, plot pass (6); chat E2.* and widget E4.1 fail
+  as expected (T24a/T41b). `npm run build` ok. Screenshots `logs/screens/T17b-plots.png`, `E1.1-dashboard.png`.
 - 2026-11-21 · T17a · done · `src/components/Dashboard.tsx`: react-grid-layout v2 (`ReactGridLayout` +
   `useContainerWidth`, 12 cols, rowHeight 40, margin 12) rendered only from `spec.layout`; drag/resize disabled until
   T17e (handle class `.panel-drag-handle` on the title bar is ready). `panels/PanelFrame.tsx`: card `panel-<id>` with
