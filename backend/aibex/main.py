@@ -11,10 +11,17 @@ from typing import Any
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from aibex import __version__
 from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
+from aibex.query import QueryError, run_query
+
+
+class QueryRequest(BaseModel):
+    sql: str
+    limit: int | None = None
 
 
 def get_settings(request: Request) -> Settings:
@@ -43,6 +50,15 @@ def _api_router() -> APIRouter:
     @router.get("/bundles/{bundle_id}/schema")
     def bundle_schema(bundle_id: str, request: Request) -> dict:
         return get_bundle(request, bundle_id).schema()
+
+    @router.post("/bundles/{bundle_id}/query")
+    def bundle_query(bundle_id: str, body: QueryRequest, request: Request) -> dict:
+        """Read-only single SELECT/WITH; 400 with the reason when the guard rejects it or it fails."""
+        bundle = get_bundle(request, bundle_id)
+        try:
+            return run_query(bundle.cursor(), body.sql, body.limit)
+        except QueryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
 
     return router
 

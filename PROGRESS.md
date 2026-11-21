@@ -15,7 +15,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 ## Phase 1 – bundles + dashboard
 - [x] T10 `create_app()` factory + `Settings.llm_provider` per docs/api.md; keep `app = create_app()`; `make test` passes
 - [x] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
-- [ ] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
+- [x] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
 - [ ] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
 - [ ] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
 - [ ] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
@@ -70,6 +70,16 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T12 · done · `aibex/query.py`: `check_readonly` (DuckDB `extract_statements` → exactly one SELECT;
+  DuckDB `tokenize` → no call to forbidden functions: `read_*`, `pragma_*`, `glob`, `query`/`query_table`,
+  `*_scan`, `getenv`, `duckdb_secrets`, … – names in string literals/comments are ignored), `run_query(cur, sql,
+  limit, params)` → `{columns, rows, row_count, truncated}`: limit default 200, clamped to 0..5000, runs the original
+  query and fetches limit+1 (order kept); `row_count` via `count(*)` over the query only when truncated; values made
+  JSON-safe (NaN/inf → null, dates → ISO). Bound `params` are ready for widget `$selected` (T40a); the guard is meant
+  to be reused by `query_data` (T22a) and widget input SQL (T13b). `POST /api/bundles/{id}/query` (400 `{detail}` on
+  guard/SQL errors, 404 unknown bundle). External access disabled + config locked was already done in T11.
+  Tests: `tests/test_query.py` (43); acceptance A1.1–A1.3 pass (16); the other phase-1 failures are T13b+ endpoints
+  (expected). No new dependencies. Note: a Bash heredoc that ran python was refused by the runner, so I used Edit.
 - 2026-11-21 · T11 · done · `aibex/bundles.py`: `load_bundle` creates one in-memory DuckDB per bundle and
   materialises every bundle table as a DuckDB table with the same name (parquet/tsv/csv; file paths must stay inside the
   bundle), so tables are joinable directly. Columns: declared type/description win, others inferred → vocabulary
