@@ -15,15 +15,19 @@ import pytest
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
-def pytest_configure(config):
-    for m in ["phase1", "phase2", "phase3", "phase4", "live"]:
-        config.addinivalue_line("markers", f"{m}: acceptance tests for {m}")
+# markers phase1..phase4 and live are registered in backend/pyproject.toml
 
 
 def pytest_collection_modifyitems(config, items):
-    if os.getenv("LLM_API_KEY") or (Path(__file__).resolve().parents[3] / ".env").exists():
+    """Live tests call the shared e-INFRA service: run them only when `-m live` is selected explicitly
+    (make accept-live) AND credentials exist. A plain `pytest` / `make accept` never calls the real model."""
+    markexpr = config.getoption("markexpr", "") or ""
+    selected = "live" in markexpr and "not live" not in markexpr
+    has_creds = bool(os.getenv("LLM_API_KEY")) or (Path(__file__).resolve().parents[3] / ".env").exists()
+    if selected and has_creds:
         return
-    skip = pytest.mark.skip(reason="no LLM credentials")
+    reason = "live LLM test: run with -m live (make accept-live)" if not selected else "no LLM credentials"
+    skip = pytest.mark.skip(reason=reason)
     for item in items:
         if "live" in item.keywords:
             item.add_marker(skip)

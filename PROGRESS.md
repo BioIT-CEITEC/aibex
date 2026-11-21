@@ -1,50 +1,91 @@
 # PROGRESS – Aibex View
 
 Task list for interactive and overnight work. One task = one focused change of about an hour or less, ending with
-passing tests and a commit. The overnight agent takes the **first unchecked task whose dependencies are done**.
+passing tests and a commit. The overnight agent takes the **first `[~]` task, else the first `[ ]` task, whose
+`after:` tasks are all `[x]`**, and skips tasks marked "– Vojta".
 Status markers: `- [ ]` todo · `- [x]` done · `- [!]` blocked (reason in the Log) · `- [~]` partly done (see Log).
-Test IDs refer to `docs/acceptance.md`.
+IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "Qn" = open question in the Log.
 
 ## Phase 0 – setup (interactive, before the first overnight run)
 - [ ] T00 Phase 0 deploy done (pod running, URL works) – Vojta
-- [ ] T01 Node 22+, `uv`, Playwright browsers installed on the Mac (`npx playwright install chromium`) – Vojta
+- [ ] T01 Node 22+, `uv`, Playwright browsers installed on the Mac (`npx playwright install chromium`); `node`/`npx` on the PATH Claude Code sees (the Playwright MCP currently fails: npx not found) – Vojta
 - [ ] T02 Acceptance kit copied into the repo; planning session reviewed this list – Vojta
+- [ ] T03 Answer the open questions Q1–Q9 at the top of the Log; update docs/api.md "(proposed)" items accordingly – Vojta
 
 ## Phase 1 – bundles + dashboard
-- [ ] T10 `create_app()` factory + `Settings` fields per docs/api.md; keep `app = create_app()`; existing tests pass
-- [ ] T11 Bundle loading: DuckDB connection per bundle, views per table, inferred columns, links → `GET /bundles`, `/schema` (A1.1, A1.2)
-- [ ] T12 Read-only query endpoint with SQL guard (sqlglot or DuckDB parser) and caps (A1.3)
-- [ ] T13 Pydantic spec models + `POST /validate-spec` incl. expr allow-list (A1.5)
-- [ ] T14 Default view generator from bundle schema (volcano, MA, PCA from counts, top-genes heatmap, table) (A1.4)
-- [ ] T15 Sessions (in memory) + `POST /sessions`, `GET /sessions/{sid}` + `panel-data` with filters/expr (A1.6)
-- [ ] T16 Frontend scaffold: Vite + React + TS + Tailwind + shadcn/ui + zustand; API client; dev proxy; test ids per docs/api.md
-- [ ] T17 Spec renderer: grid layout, plot panels (react-plotly.js: scatter, bar, box, violin, histogram, heatmap, pca), table panel, filters bar, linked selection
-- [ ] T18 Move `frontend-e2e/*` into `frontend/`, Playwright set up; E1.1–E1.3 pass; M1 screenshot
-- [ ] T19 `scripts/make_airway_bundle.py` (public data, pydeseq2) (A1.7) – needs network; mark `[!]` if it fails offline
+- [ ] T10 `create_app()` factory + `Settings.llm_provider` per docs/api.md; keep `app = create_app()`; `make test` passes
+- [ ] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
+- [ ] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
+- [ ] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
+- [ ] T13b Semantic validation against the bundle schema + `expr` parser/allow-list + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
+- [ ] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
+- [ ] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
+- [ ] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with filters (same table; linked tables if Q2 = yes) [A1.6] (after: T15)
+- [ ] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
+- [ ] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
+- [ ] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
+- [ ] T16c Typed API client, zustand store, `?bundle=` session bootstrap, bundle selector, `spec-version`, error banner [E1.2, E1.3] (after: T15, T16b)
+- [ ] T17a Grid layout (react-grid-layout, 12 columns) + panel frame (`panel-<id>`) + table panel (`table-<id>`, sort, paging) (after: T15b, T16c)
+- [ ] T17b Plot panel via react-plotly.js: scatter/line/bar/histogram/box/violin, colour, labels as annotations [E1.1] (after: T17a)
+- [ ] T17c PCA + heatmap rendering (after: T15c, T17b)
+- [ ] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
+- [ ] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
+- [ ] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
+- [ ] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline; wait for Q5 (after: T11)
 
 ## Phase 2 – prompt editing
-- [ ] T20 Spec store: versioned history, `patch` / `undo` / `redo` endpoints (A2.1)
-- [ ] T21 Provider adapter: `LLMProvider`, `OpenAICompatibleProvider` (tools + JSON fallback), `FakeProvider` rules (docs/api.md)
-- [ ] T22 Chat loop + tools (`describe_bundle`, `query_data`, `update_view`, `undo_view`), repair logic, privacy caps (A2.2, A2.3)
-- [ ] T23 `POST /chat` SSE + `?stream=false` (A2.4); system prompt with spec-format summary and panel index
-- [ ] T24 Frontend chat panel (streaming), history list, undo/redo buttons, spec-version indicator; E2.1–E2.4 pass
-- [ ] T25 Live check with the real model (`-m live`, A2.5); tune the system prompt; write results + latency to the Log
+- [ ] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
+- [ ] T21b `FakeProvider` rules per docs/api.md + unit tests; provider selection in `create_app` (after: T21a)
+- [ ] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
+- [ ] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
+- [ ] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
+- [ ] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
+- [ ] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
+- [ ] T25 Live check with the real model (`make accept-live`, ≤3 runs, A2.5); tune the system prompt; results + latency in the Log (after: T23)
+- [ ] T26 M2: demo prompts 1–3 and 6 with the real model on airway (or toy, Q5); latency in the Log – Vojta (after: T24b, T25)
+- [ ] T27 Morning review: merge Phases 1–2 to `main`, push, `make restart` – Vojta
 
 ## Phase 3 – ADAR2
-- [ ] T30 Inspect `raw/adar2-editing` (path = `$AIBEX_DATA_DIR/../raw/adar2-editing`); write assumptions to `data/adar2-notes.md` (outside git); do not copy raw files
-- [ ] T31 `scripts/convert_adar2.py` → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables (A3.1, A3.2)
-- [ ] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) (A3.3, A3.4)
+- [ ] T29 Put the ADAR2 pipeline outputs at `$AIBEX_DATA_DIR/../raw/adar2-editing` and answer Q3, Q7, Q9 – Vojta
+- [ ] T30 Inspect `raw/adar2-editing` (file list, headers, row counts only unless Q3 allows more); write assumptions to `data/adar2-notes.md` (outside git); do not copy raw files (after: T29)
+- [ ] T31 `scripts/convert_adar2.py` → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables, incl. per-gene editing summary columns in `de` if Q4 = precompute [A3.1, A3.2] (after: T30, T11)
+- [ ] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
+- [ ] T33 M3: confirm the assumptions in `data/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
 
 ## Phase 4 – Level 2 widgets
-- [ ] T40 `create_widget` tool + widget validation + inputs resolution with `$selected` (A4.1–A4.3)
-- [ ] T41 Browser TSX compile (sucrase) + sandboxed iframe runtime + postMessage data bridge; E4.1 passes
-- [ ] T42 Example widget prompt on ADAR2 ("editing sites along the gene"), check with the real code model (M4)
+- [ ] T40a Widget validation (code size/blocklist, input SQL read-only) + `panel-data` input resolution with `$selected` as a bound parameter [A4.2, A4.3] (after: T13b, T15b)
+- [ ] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
+- [ ] T41a Iframe runtime: srcdoc with CSP + inlined React, postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
+- [ ] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
+- [ ] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
 
 ## Phase 5 – polish
-- [ ] T50 Loading states, error banner with retry (P5.1)
-- [ ] T51 Saved views per bundle (P5.2)
-- [ ] T52 Demo-script panel with the 6 demo prompts (P5.3)
-- [ ] T53 Theme + palette pass (P5.4); final screenshots of every demo prompt into `logs/screens/`
+- [ ] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
+- [ ] T51 Saved views per bundle: `/bundles/{id}/views`, `/sessions/{sid}/load-view`, UI save/load; unit tests [P5.2] (after: T15, T24b)
+- [ ] T52 Demo-script panel with the 6 demo prompts, click to send [P5.3] (after: T24a)
+- [ ] T53 Theme + palette pass (light/dark) [P5.4]; final screenshots of every demo prompt into `logs/screens/` (after: T50, T52)
+- [ ] T54 Production build check: `npm run build`, uvicorn serves `frontend/dist` at `/`, health ok; note any deploy change needed (after: T53)
+- [ ] T55 Deploy and run all demo prompts on the public URL [P5.5] – Vojta (after: T54)
+- [ ] T56 Harness mock on branch `demo/workshop-2026-11` (scope to be decided) – Vojta
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+
+### Open questions for Vojta (answer in T03 / T29; then delete or mark answered)
+- **Q1 expr grammar.** Allow comparisons, `AND/OR/NOT`, string literals and `CASE WHEN` in `expr` (needed to colour the
+  volcano by significance), and `expr` in filters (needed for demo prompt 2, `|log2FC| > 1`)? Proposed: yes to both.
+- **Q2 filter reach.** Should a filter on `de` also filter panels on linked tables (counts heatmap, editing sites) via the
+  bundle `links`? Proposed: yes (makes "everywhere" in demo prompt 2 true). If yes, add a phase-1 acceptance test.
+- **Q3 ADAR2 privacy vs the coding agent.** The overnight agent runs on the Anthropic API: anything it reads from the raw
+  ADAR2 files leaves the machine. OK to read file names, headers and a few rows? Or only names/headers/row counts?
+- **Q4 Demo prompt 4 (colour volcano by editing change).** Precompute per-gene editing summary columns into `de`
+  (`n_edit_sites`, `mean_delta`, `max_abs_delta`) in the converter (proposed, no spec change), or support linked
+  aggregate fields in the spec (`{"field": "editing.delta", "agg": "mean"}`)?
+- **Q5 Airway bundle.** Keep the public airway dataset for M2 (where should counts come from — e.g. the GEO/Bioconductor
+  airway counts — and is a standalone script with pydeseq2 fine)? Or run M2 on the toy bundle and skip T19?
+- **Q6 Version granularity.** One version per applied tool call (current tests) or one version per chat message (a prompt
+  that makes two edits undoes as one)? Proposed: keep per tool call for now.
+- **Q7 ADAR2 sizes.** Roughly how many editing sites / rows per table? Decides whether tables are loaded into memory
+  (simplest, safest query guard) or queried from parquet.
+- **Q8 Widget runtime libraries.** React only inside the sandbox, or also Plotly (~3 MB inlined per widget)?
+- **Q9 Genome build** and annotation version for the ADAR2 `bundle.yaml` (`genome:` field).

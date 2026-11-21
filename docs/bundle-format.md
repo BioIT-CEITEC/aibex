@@ -53,10 +53,18 @@ links:
 default_view: views/default.json                 # optional starting spec
 ```
 
+## samples.tsv
+Tab-separated, first column `sample` (sample names exactly as the matrix column names), further columns are sample
+annotations (e.g. `genotype`, `batch`). Used for PCA colours and heatmap grouping.
+
 ## Rules
 - Column names in tables must match `bundle.yaml`. Unknown extra columns are allowed and exposed with type inferred.
+- Column `type` vocabulary: `string`, `int`, `float`, `bool`, `date`. Inferred types are mapped to the same vocabulary.
+- A **matrix table** (e.g. normalised counts) is wide: the key column (e.g. `gene_id`) plus one numeric column per sample,
+  named as in `samples.tsv`. Such tables need not declare the sample columns; they are used by `pca` and `heatmap` panels.
 - `key` columns must be unique within a table.
 - `links` declare joinable keys; the backend creates DuckDB views so the LLM can join modalities.
 - Bundles with real/unpublished data are **never** committed. Locally they live under `data/` or `AIBEX_DATA_DIR`;
   on the cluster on the PVC mounted at `/data`.
 - A converter script per source format lives in `scripts/` (e.g. `scripts/convert_adar2.py`).
+- `views/` inside the bundle holds `default.json` (optional) and the saved views written by the app (`views/<name>.json`).

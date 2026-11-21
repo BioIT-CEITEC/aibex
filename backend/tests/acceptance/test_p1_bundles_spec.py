@@ -50,14 +50,22 @@ def test_query_default_cap_200_and_truncated(client):
     body = r.json()
     assert len(body["rows"]) == 200
     assert body["truncated"] is True
-    assert body["row_count"] >= 200
+    assert body["row_count"] == 300  # total rows of the unlimited query (docs/api.md)
+    assert isinstance(body["rows"][0], list)  # rows are arrays aligned with columns
 
 
 def test_query_limit_max_5000(client):
+    # limit above 5000 is clamped to 5000 (docs/api.md); the toy editing table has 300 rows
     r = client.post("/api/bundles/toy/query", json={"sql": "SELECT * FROM editing", "limit": 100000})
-    assert r.status_code in (200, 400)
-    if r.status_code == 200:
-        assert len(r.json()["rows"]) <= 5000
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["rows"]) == 300
+    assert body["truncated"] is False
+    r = client.post("/api/bundles/toy/query",
+                    json={"sql": "SELECT a.site_id, b.site_id AS other FROM editing a CROSS JOIN editing b", "limit": 100000})
+    assert r.status_code == 200, r.text
+    assert len(r.json()["rows"]) == 5000
+    assert r.json()["truncated"] is True
 
 
 @pytest.mark.parametrize(
@@ -90,6 +98,12 @@ def test_default_view_is_valid_and_useful(client):
     assert "table" in types
     assert any(p["type"] == "plot" and p.get("kind") == "scatter" for p in spec["panels"])
     assert len(spec["panels"]) >= 4
+    # the first plot panel is the volcano-like scatter with a label object (FakeProvider `label` rule,
+    # e2e E2.1 and test_chat_update_view_applies patch /panels/<i>/label/values)
+    first_plot = next(p for p in spec["panels"] if p["type"] == "plot")
+    assert first_plot.get("kind") == "scatter"
+    assert isinstance(first_plot.get("label", {}).get("values"), list)
+    assert {item["i"] for item in spec["layout"]} == {p["id"] for p in spec["panels"]}
     v = client.post("/api/validate-spec", json=spec).json()
     assert v["valid"] is True, v
 

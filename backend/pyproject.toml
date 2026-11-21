@@ -29,3 +29,13 @@ packages = ["aibex"]
 
 [tool.ruff]
 line-length = 110
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "phase1: acceptance tests for phase 1 (bundles, spec, panel data)",
+  "phase2: acceptance tests for phase 2 (sessions, chat loop)",
+  "phase3: acceptance tests for phase 3 (ADAR2 bundle)",
+  "phase4: acceptance tests for phase 4 (Level 2 widgets)",
+  "live: calls the real e-INFRA LLM; runs only with -m live (make accept-live)",
+]

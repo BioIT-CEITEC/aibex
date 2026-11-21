@@ -48,14 +48,26 @@ DATA_DIR="$(grep -E '^AIBEX_DATA_DIR=' .env 2>/dev/null | head -1 | cut -d= -f2-
 if [[ -n "$DATA_DIR" && -d "$DATA_DIR/.." ]]; then ADD_DIRS=(--add-dir "$(cd "$DATA_DIR/.." && pwd)"); fi
 
 ALLOWED=(
-  "Read" "Edit" "Write" "Glob" "Grep" "TodoWrite" "mcp__playwright"
+  "Read" "Edit" "Write" "Glob" "Grep" "TodoWrite" "TaskCreate" "TaskUpdate" "TaskList" "mcp__playwright"
   "Bash(uv *)" "Bash(npm *)" "Bash(npx *)" "Bash(node *)"
-  "Bash(make test*)" "Bash(make eval-llm*)"
-  "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" "Bash(git add *)" "Bash(git commit *)"
+  "Bash(make test*)" "Bash(make accept*)" "Bash(make e2e*)" "Bash(make eval-llm*)" "Bash(make help*)"
+  "Bash(git status*)" "Bash(git diff*)" "Bash(git log*)" "Bash(git show *)" "Bash(git ls-files*)"
+  "Bash(git add *)" "Bash(git commit *)" "Bash(git rm *)" "Bash(git mv *)"
   "Bash(git branch --show-current)" "Bash(git restore *)" "Bash(git stash *)"
-  "Bash(ls *)" "Bash(cat *)" "Bash(head *)" "Bash(tail *)" "Bash(wc *)" "Bash(grep *)" "Bash(find *)"
-  "Bash(mkdir *)" "Bash(mv *)" "Bash(cp *)" "Bash(touch *)" "Bash(sleep *)"
-  "Bash(curl -s http://localhost*)" "Bash(lsof -i*)" "Bash(pkill -f uvicorn*)"
+  "Bash(cd *)" "Bash(ls *)" "Bash(cat *)" "Bash(head *)" "Bash(tail *)" "Bash(wc *)" "Bash(grep *)" "Bash(find *)"
+  "Bash(sort *)" "Bash(diff *)" "Bash(echo *)" "Bash(which *)" "Bash(date*)" "Bash(pwd)"
+  "Bash(mkdir *)" "Bash(mv *)" "Bash(cp *)" "Bash(touch *)" "Bash(rmdir *)" "Bash(sleep *)"
+  "Bash(curl -s http://localhost*)" "Bash(lsof -i*)" "Bash(pkill -f uvicorn*)" "Bash(pkill -f vite*)"
+)
+# Deny rules win over allow rules, including the interactive allow-list in .claude/settings.json
+# (which also applies to headless runs: git switch/checkout, kubectl get, make dev, ...).
+DISALLOWED=(
+  "Bash(git switch*)" "Bash(git checkout*)" "Bash(git push*)" "Bash(git merge*)" "Bash(git rebase*)"
+  "Bash(git reset --hard*)" "Bash(git remote*)" "Bash(git branch -D*)" "Bash(git stash drop*)" "Bash(git stash clear*)"
+  "Bash(kubectl*)" "Bash(make deploy*)" "Bash(make restart*)" "Bash(make upload-data*)" "Bash(make k8s-secret*)"
+  "Bash(make logs*)" "Bash(make dev*)" "Bash(rm -rf*)"
+  "Read(./.env)" "Read(./.env.local)" "Read(./.env.llm)"
+  "Bash(cat .env*)" "Bash(head .env*)" "Bash(tail .env*)" "Bash(grep * .env*)" "Bash(cp .env*)"
 )
 MODEL_ARGS=(); [[ -n "${MODEL:-}" ]] && MODEL_ARGS=(--model "$MODEL")
 PROMPT="$(cat docs/overnight-prompt.md)"
@@ -68,7 +80,8 @@ past_deadline() {  # true between DEADLINE and noon
 stalls=0
 for ((i = 1; i <= MAX_ITER; i++)); do
   if past_deadline; then say "deadline reached"; break; fi
-  if ! grep -qE '^- \[ \] T[1-9]' PROGRESS.md; then say "no open tasks left"; break; fi
+  # open = todo or partly done, not marked for Vojta
+  if ! grep -E '^- \[( |~)\] T[1-9]' PROGRESS.md | grep -vq -- '– Vojta'; then say "no open tasks left"; break; fi
 
   before="$(git rev-parse HEAD)"
   ilog="$LOGDIR/iter-$(printf %02d "$i").jsonl"
@@ -76,6 +89,7 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   claude -p "$PROMPT" \
     --permission-mode dontAsk \
     --allowedTools "${ALLOWED[@]}" \
+    --disallowedTools "${DISALLOWED[@]}" \
     ${ADD_DIRS[@]+"${ADD_DIRS[@]}"} ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} \
     --max-turns "$MAX_TURNS" \
     --output-format stream-json --verbose >"$ilog" 2>&1
@@ -89,7 +103,8 @@ for ((i = 1; i <= MAX_ITER; i++)); do
 
   if grep -q "ALL_TASKS_DONE_OR_BLOCKED" "$ilog"; then say "agent reports all tasks done or blocked"; break; fi
 
-  if grep -qiE 'usage limit|rate limit|limit reached|429|overloaded' "$ilog" && [[ "$before" == "$after" ]]; then
+  # look only at the final result/error lines – tool output (genomic positions, ids) can contain "429"
+  if tail -n 3 "$ilog" | grep -qiE 'usage limit|rate[ _]limit|limit reached|overloaded|"status":? ?429' && [[ "$before" == "$after" ]]; then
     say "usage/rate limit – sleeping 20 min"; sleep 1200; continue
   fi
 

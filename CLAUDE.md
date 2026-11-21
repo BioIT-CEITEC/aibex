@@ -5,7 +5,7 @@ This repo currently builds **Aibex View**: a web app that shows bioinformatics r
 dashboard which biologists can **change by typing prompts**. An LLM edits a declarative *view spec* (Level 1)
 and, if needed, writes small sandboxed widgets (Level 2).
 
-Read before larger changes: `docs/architecture.md`, `docs/spec-format.md`, `docs/bundle-format.md`, `docs/deploy.md`, `docs/roadmap.md` (phases + demo prompts).
+Read before larger changes: `docs/architecture.md`, `docs/api.md` (contracts), `docs/acceptance.md`, `docs/spec-format.md`, `docs/bundle-format.md`, `docs/deploy.md`, `docs/roadmap.md` (phases + demo prompts). Task list: `PROGRESS.md`.
 The long-term vision (harness: intake → resources → compute → analysis → view) is in `docs/vision.md` – do not build it in `main` yet.
 
 ## Goal right now
@@ -28,7 +28,9 @@ data/         LOCAL ONLY, gitignored. Bundles live here or under AIBEX_DATA_DIR.
 
 ## Commands
 - `make dev` – backend (port 8000, reload) + frontend dev server (port 5173, proxies /api)
-- `make test` – backend tests (pytest) + frontend typecheck/lint
+- `make test` – unit tests + ruff + frontend typecheck/lint (no acceptance tests)
+- `make accept` / `make accept-phase P=2` / `make accept-live` – acceptance tests (`docs/acceptance.md`)
+- `make e2e` – Playwright e2e with the FakeProvider and the toy bundle
 - `make eval-llm` – compare e-INFRA models on tool calling (`scripts/llm_eval.py`)
 - `make deploy` / `make restart` / `make logs` – cluster (see docs/deploy.md); `make upload-data BUNDLE=...`
 - Python: always `uv run ...` / `uv add ...` inside `backend/`. Node: `npm` inside `frontend/`.
@@ -37,7 +39,7 @@ data/         LOCAL ONLY, gitignored. Bundles live here or under AIBEX_DATA_DIR.
 1. **View spec** (`docs/spec-format.md`) is the single source of truth for what the UI shows. The frontend renders only from the spec. Every LLM change is an RFC 6902 JSON Patch on the spec, validated by Pydantic before it is applied. Keep a history stack (undo/redo) of applied specs.
 2. **Results bundle** (`docs/bundle-format.md`) is how data enters. Never hard-code dataset column names in UI code; read them from `bundle.yaml`.
 3. **LLM data access** goes only through tools: `describe_bundle`, `query_data` (read-only DuckDB SQL, results capped at 200 rows, aggregates preferred), `update_view` (JSON Patch), `create_widget` (Level 2). The LLM never receives full raw tables. This mirrors the "only partial results leave the secure environment" principle – keep it.
-4. **LLM provider** is behind `aibex/llm/provider.py` (OpenAI-compatible chat completions with tools). Config only via env: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST`, `LLM_MODEL_CODE`. Default backend is the e-INFRA CZ service (`https://llm.ai.e-infra.cz/v1`). If a model returns no tool call, fall back to parsing a JSON block from the text; if that fails, show the message and change nothing.
+4. **LLM provider** is behind `aibex/llm/provider.py` (OpenAI-compatible chat completions with tools). Config only via env: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_FAST`, `LLM_MODEL_CODE`, `LLM_PROVIDER` (`openai` | `fake`). Default backend is the e-INFRA CZ service (`https://llm.ai.e-infra.cz/v1`). If a model returns no tool call, fall back to parsing a JSON block from the text; if that fails, show the message and change nothing.
 5. **Level 2 widgets** run only inside a sandboxed `<iframe sandbox="allow-scripts">` with no network; data is passed by `postMessage` from the parent. Generated code is stored with the spec (`panels[].widget`) and can be undone like any other change.
 
 ## Rules

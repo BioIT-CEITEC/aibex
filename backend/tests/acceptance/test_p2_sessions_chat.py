@@ -52,6 +52,22 @@ def test_undo_redo(client, session, h):
     assert r["version"] == 4  # every applied change, including undo/redo, increments
 
 
+def test_undo_nothing_409(client, session):
+    sid = session["session_id"]
+    assert client.post(f"/api/sessions/{sid}/undo", json={"steps": 1}).status_code == 409
+    assert client.post(f"/api/sessions/{sid}/redo", json={"steps": 1}).status_code == 409
+    assert client.get(f"/api/sessions/{sid}").json()["version"] == 0
+
+
+def test_new_change_clears_redo(client, session, h):
+    sid, spec = session["session_id"], session["spec"]
+    i = h.first_scatter(spec)
+    client.post(f"/api/sessions/{sid}/patch", json={"patch": [{"op": "replace", "path": f"/panels/{i}/title", "value": "A"}]})
+    client.post(f"/api/sessions/{sid}/undo", json={})
+    client.post(f"/api/sessions/{sid}/patch", json={"patch": [{"op": "replace", "path": f"/panels/{i}/title", "value": "C"}]})
+    assert client.post(f"/api/sessions/{sid}/redo", json={}).status_code == 409
+
+
 # A2.2 chat applies tool calls
 def test_chat_update_view_applies(client, session, provider, h):
     sid, spec = session["session_id"], session["spec"]
@@ -94,6 +110,15 @@ def test_chat_gives_up_after_two_failures(client, session, provider, h):
     provider.queue(h.tool_call("update_view", bad, "c1"), h.tool_call("update_view", bad, "c2"),
                    h.tool_call("update_view", bad, "c3"))
     out = _chat(client, sid, "break it")
+    assert out["version"] == 0
+    assert any(e["type"] == "error" for e in out["events"])
+    assert len(provider.calls) == 2, "the loop must stop after 2 failed attempts in a row"
+
+
+def test_chat_stops_after_8_provider_calls(client, session, provider, h):
+    provider.queue(*[h.tool_call("describe_bundle", {}, f"c{k}") for k in range(12)])
+    out = _chat(client, session["session_id"], "keep looking")
+    assert len(provider.calls) == 8
     assert out["version"] == 0
     assert any(e["type"] == "error" for e in out["events"])
 

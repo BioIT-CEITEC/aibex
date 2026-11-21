@@ -35,6 +35,7 @@ patched spec with Pydantic (`backend/aibex/spec.py`) and rejects anything invali
 {"id": "sig", "table": "de", "field": "padj", "op": "<=", "value": 0.05, "label": "padj ≤ 0.05", "enabled": true}
 ```
 `op`: `<=`, `>=`, `<`, `>`, `==`, `!=`, `in`, `between` (value = [min, max]), `contains`.
+`label` is optional. Which panels a filter reaches (same table; linked tables – proposed) is defined in `docs/api.md` → "Filters".
 
 ## Panels
 
@@ -50,16 +51,35 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
   "kind": "scatter",
   "x": {"field": "log2FoldChange", "label": "log2 FC"},
   "y": {"expr": "-log10(padj)", "label": "-log10 padj"},
-  "color": {"field": "significant", "palette": {"true": "#d62728", "false": "#bbbbbb"}},
+  "color": {"field": "padj", "colorscale": "Viridis"},
   "size": null,
   "label": {"field": "gene_name", "values": ["Gria2", "Cyfip2"], "top_n": 10, "by": "padj"},
   "facet": null,
   "plotly": {}
 }
 ```
-- `kind`: `scatter`, `bar`, `box`, `violin`, `histogram`, `heatmap`, `line`, `pca` (computed server-side from a count/matrix table).
-- An axis is either `{"field": ...}` or `{"expr": ...}`. `expr` is a restricted DuckDB SQL expression over the table's columns (validated server-side; no subqueries, no functions outside an allow-list: log, log2, log10, abs, ln, sqrt, round, least, greatest, coalesce, case).
+- `kind`: `scatter`, `bar`, `box`, `violin`, `histogram`, `heatmap`, `line`, `pca` (`pca` and `heatmap` are computed server-side from a matrix table, see below).
+- An axis (and `color`, `size`) is either `{"field": ...}` or `{"expr": ...}`. `expr` is a restricted DuckDB SQL expression over the table's columns, validated server-side. The grammar (allowed operators and functions) is defined once in `docs/api.md` → "Spec validation rules".
+- `color` may carry a `palette` (`{value: colour}`, categorical) or a `colorscale` (Plotly name, continuous).
+- `label`: `values` are labelled explicitly; `top_n` + `by` label the top rows by a column (ascending). The first scatter of a generated default view always has a `label` object (possibly with empty `values`).
 - `plotly` holds optional raw Plotly layout/trace overrides (escape hatch; validated to be plain JSON).
+
+### `pca`
+```json
+{"id": "pca", "type": "plot", "kind": "pca", "title": "PCA", "table": "counts",
+ "top_n": 500, "scale": "log1p", "color": {"field": "genotype"}}
+```
+`table` is a matrix table (see bundle-format.md); PCA uses the `top_n` most variable rows (default 500) after `scale`
+(`none` | `log1p`, default `log1p`). `color.field` is a column of `samples.tsv`. Each point is a sample.
+
+### `heatmap`
+```json
+{"id": "top-genes", "type": "plot", "kind": "heatmap", "title": "Top 30 genes", "table": "counts",
+ "rows": {"top_n": 30, "by": "de.padj", "values": []}, "group_by": "genotype", "scale": "row-z"}
+```
+`rows` picks matrix rows: explicit key `values`, or the `top_n` rows ordered ascending by a column of a linked table
+(`<table>.<column>`). Columns are the samples, ordered and annotated by the `samples.tsv` column `group_by`.
+`scale`: `none` | `log1p` | `row-z` (default `row-z`).
 
 ### `table`
 ```json
@@ -80,7 +100,8 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
  "language": "tsx"}
 ```
 The code is compiled in the browser and runs in a sandboxed iframe (no network, no parent DOM).
-`inputs` are resolved by the backend through the same read-only query path the LLM uses.
+`inputs` are resolved by the backend through the same read-only query path the LLM uses. Runtime details (CSP, postMessage,
+layout placement) are in `docs/api.md` → "Level 2 widget runtime".
 
 ## Layout
 

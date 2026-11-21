@@ -21,15 +21,19 @@ test('E2.1 label prompt changes the spec and shows labels', async ({ page }) => 
 });
 
 test('E2.2 filter prompt reduces table rows', async ({ page }) => {
-  const rows = page.locator('[data-testid^="table-"] tbody tr');
+  const rows = page.locator('[data-testid^="table-"]').first().locator('tbody tr');
   await expect(rows.first()).toBeVisible();
+  const before = await rows.count();
   await send(page, 'padj below 0.001');
   await expect(page.getByTestId('spec-version')).toHaveText('1', { timeout: 15_000 });
   await expect(page.getByTestId('filter-padj-lt')).toBeChecked();
-  // toggling the filter off brings rows back (and is itself an undoable change)
+  // toy bundle: ~20 of 200 genes have padj < 0.001, the table page shows more rows than that before
+  await expect.poll(async () => rows.count()).toBeLessThan(before);
   const filtered = await rows.count();
+  // toggling the filter off brings rows back and is itself an undoable change (source "user")
   await page.getByTestId('filter-padj-lt').uncheck();
-  await expect.poll(async () => rows.count()).toBeGreaterThanOrEqual(filtered);
+  await expect(page.getByTestId('spec-version')).toHaveText('2');
+  await expect.poll(async () => rows.count()).toBeGreaterThan(filtered);
 });
 
 test('E2.3 undo and redo buttons', async ({ page }) => {

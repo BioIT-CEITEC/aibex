@@ -2,10 +2,10 @@
 NS ?= bystry-ns
 BUNDLE ?=
 
-.PHONY: help dev dev-backend dev-frontend test eval-llm k8s-secret deploy restart status logs upload-data url
+.PHONY: help dev dev-backend dev-frontend test accept accept-phase accept-live e2e eval-llm k8s-secret deploy restart status logs upload-data url
 
 help:
-	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n",$$1,$$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n",$$1,$$2}'
 
 dev: ## backend (8000) + frontend (5173) with reload
 	@$(MAKE) -j2 dev-backend dev-frontend
@@ -16,9 +16,23 @@ dev-backend: ## backend only
 dev-frontend: ## frontend only (needs frontend/package.json)
 	@if [ -f frontend/package.json ]; then cd frontend && npm run dev; else echo "frontend not created yet"; fi
 
-test: ## backend tests (+ frontend checks when present)
-	cd backend && uv run pytest -q
+test: ## unit tests + lint only (no acceptance tests; + frontend checks when present)
+	cd backend && uv run ruff check . && uv run pytest -q --ignore=tests/acceptance
 	@if [ -f frontend/package.json ]; then cd frontend && npm run -s typecheck --if-present && npm run -s lint --if-present; fi
+
+accept: ## all acceptance tests (no live LLM)
+	cd backend && uv run pytest -q tests/acceptance -m "not live" $(ARGS)
+
+accept-phase: ## acceptance tests of one phase: make accept-phase P=2
+	@test -n "$(P)" || (echo "usage: make accept-phase P=<1-4>" && exit 1)
+	cd backend && uv run pytest -q tests/acceptance -m "phase$(P) and not live" $(ARGS)
+
+accept-live: ## live tests against the real e-INFRA model (reads .env; be nice to the shared service)
+	cd backend && uv run pytest -q tests/acceptance -m live $(ARGS)
+
+e2e: ## Playwright e2e (FakeProvider + toy bundle); make e2e ARGS=e2e/chat.spec.ts
+	@if [ -f frontend/playwright.config.ts ]; then cd frontend && npx playwright test $(ARGS); \
+	else echo "e2e not set up yet: frontend-e2e/ moves into frontend/ in task T16b"; exit 1; fi
 
 eval-llm: ## compare LLMs on tool calling (reads .env)
 	uv run scripts/llm_eval.py $(ARGS)

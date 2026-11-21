@@ -8,6 +8,8 @@ test('E4.1 add widget renders inside a sandboxed iframe', async ({ page }) => {
   const frame = page.locator('iframe[data-testid^="widget-frame-"]');
   await expect(frame).toBeVisible({ timeout: 20_000 });
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+  // sandbox alone does not block network: the srcdoc must carry a CSP that does (docs/api.md)
+  await expect(frame).toHaveAttribute('srcdoc', /default-src 'none'/);
   await expect(frame.contentFrame().locator('body')).toContainText(/\d+/);
   await page.screenshot({ path: '../logs/screens/E4.1-widget.png', fullPage: true });
 });

@@ -4,6 +4,7 @@ Runs only where the bundle exists: $AIBEX_DATA_DIR/adar2-editing/bundle.yaml (ne
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -65,7 +66,11 @@ def test_default_view_combines_modalities(real_client):
 
 
 def test_raw_data_not_in_repo():
+    # every file git could commit (tracked + untracked-but-not-ignored); gitignored data/ is allowed locally
     repo = Path(__file__).resolve().parents[3]
-    offenders = [p for p in repo.rglob("*") if "adar2" in p.name.lower() and p.suffix in {".parquet", ".tsv", ".csv", ".xlsx"}
-                 and ".git" not in p.parts and "node_modules" not in p.parts]
-    assert not offenders, f"ADAR2 data files inside the repo: {offenders}"
+    files = subprocess.run(["git", "ls-files", "--cached", "--others", "--exclude-standard"], cwd=repo,
+                           capture_output=True, text=True, check=True).stdout.splitlines()
+    data_suffixes = {".parquet", ".tsv", ".csv", ".xlsx", ".txt", ".gz", ".bed", ".vcf"}
+    offenders = [f for f in files if "adar2" in f.lower() and Path(f).suffix in data_suffixes]
+    offenders += [f for f in files if f.startswith("data/") and f != "data/.gitkeep"]
+    assert not offenders, f"ADAR2/real data files could be committed: {offenders}"

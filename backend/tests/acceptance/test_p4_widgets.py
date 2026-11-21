@@ -51,7 +51,8 @@ def test_widget_selected_param(client, session, provider, h):
 
 
 @pytest.mark.parametrize("bad", ["fetch('https://x')", "new XMLHttpRequest()", "new WebSocket('ws://x')",
-                                 "localStorage.setItem('a','b')", "document.cookie"])
+                                 "localStorage.setItem('a','b')", "document.cookie",
+                                 "importScripts('x.js')"])
 def test_widget_code_blocklist(client, session, provider, h, bad):
     code = WIDGET_CODE.replace("return", f"{bad};\n  return")
     out = _create(client, session, provider, h, code=code)

@@ -5,7 +5,7 @@ Each phase ends with something visible and a commit/merge to `main`. Use plan mo
 | Phase | Goal | Done when |
 |---|---|---|
 | 0 | Skeleton runs locally and on the cluster | `make dev` serves the placeholder; `make deploy` → https://aibex.dyn.cloud.e-infra.cz shows it; `make eval-llm` picked models |
-| 1 | Bundles + spec-driven dashboard | airway bundle loads; `GET /api/bundles/{id}/schema`, `POST /api/query` (read-only); React app renders a default spec (volcano, MA, PCA, heatmap, table) with global filters and linked selection |
+| 1 | Bundles + spec-driven dashboard | airway bundle loads; `GET /api/bundles/{id}/schema`, `POST /api/bundles/{id}/query` (read-only); React app renders a default spec (volcano, MA, PCA, heatmap, table) with global filters and linked selection |
 | 2 | Prompt editing (Level 1) | Chat panel with SSE; LLM tools `describe_bundle`, `query_data`, `update_view`; patches validated; history with undo/redo and a short change log; works with the e-INFRA model chosen in Phase 0 |
 | 3 | Real use case | ADAR2-KO RNA-seq + RNA-editing bundle via `scripts/convert_adar2.py`; cross-modality views (editing Δ vs log2FC, sites per gene, linked selection between modalities) |
 | 4 | Level 2 widgets | `create_widget` tool; TSX compiled in the browser, run in a sandboxed iframe; data via postMessage; undoable |

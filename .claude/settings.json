@@ -7,6 +7,8 @@
       "Bash(node:*)",
       "Bash(make dev:*)",
       "Bash(make test:*)",
+      "Bash(make accept:*)",
+      "Bash(make e2e:*)",
       "Bash(make eval-llm:*)",
       "Bash(make logs:*)",
       "Bash(git status:*)",
@@ -46,7 +48,11 @@
       "Bash(rm -rf:*)",
       "Read(./.env)",
       "Read(./.env.local)",
-      "Read(./.env.llm)"
+      "Read(./.env.llm)",
+      "Bash(cat .env*)",
+      "Bash(head .env*)",
+      "Bash(tail .env*)",
+      "Bash(grep * .env*)"
     ]
   }
 }
