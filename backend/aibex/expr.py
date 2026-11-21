@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 ALLOWED_FUNCTIONS = frozenset(
     {"log", "log2", "log10", "ln", "abs", "sqrt", "round", "least", "greatest", "coalesce"}
 )
+_POSITIVE_ARG_FUNCTIONS = frozenset({"log", "log2", "log10", "ln"})
 KEYWORDS = frozenset({"and", "or", "not", "is", "null", "true", "false", "case", "when", "then", "else", "end"})
 # bare words that would only make sense as SQL beyond the grammar; rejected with a clearer message
 _SQL_WORDS = frozenset(
@@ -252,6 +253,12 @@ class _Parser:
             args.append(self.or_())
         self.depth -= 1
         self._expect("op", ")")
+        # DuckDB raises on log of 0/negative and sqrt of negative numbers; one bad row (padj = 0 in a volcano)
+        # must not break a whole panel, so out-of-domain arguments become NULL instead
+        if name in _POSITIVE_ARG_FUNCTIONS:
+            args = [f"CASE WHEN ({a}) > 0 THEN ({a}) END" for a in args]
+        elif name == "sqrt":
+            args = [f"CASE WHEN ({a}) >= 0 THEN ({a}) END" for a in args]
         return f"{name}({', '.join(args)})"
 
     def case(self) -> str:

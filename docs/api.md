@@ -113,6 +113,14 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   with the explained variance (e.g. `"PC1 (42 %)"`).
 - `heatmap` panels return long format: columns `row`, `column`, `value`, `group` (sample group from `group_by`, or null).
 - `table` panels return the listed columns, sorted as specified.
+- Implementation details (`aibex/panel_data.py`): plot `label` holds the label text for rows to be labelled
+  (`values` matched case-insensitively, or the `top_n` rows ascending by `by` among the filtered rows), else null;
+  labelled rows come first so the 5000-row cap never drops them; `facet` is returned as column `facet` when set.
+  Table panels append the table key column at the end when it is not listed (needed for linked selection); rows are
+  ordered by the key after the spec's `sort`. `text` panels return empty data. Not yet implemented: `pca`/`heatmap`
+  (T15c) and `widget` (T40a) answer **501**; `selection` is accepted but only used by widget inputs. A failing panel
+  query answers **400** `{detail}`. In `expr`, `log`/`log2`/`log10`/`ln` of values ≤ 0 and `sqrt` of negative values
+  give null instead of a DuckDB error (e.g. `-log10(padj)` with `padj = 0`).
 - `widget` panels return `{inputs: {name: {columns, rows, truncated}}}` instead; each input max 5000 rows; `$selected` in
   input SQL is bound (as a parameter, never string-formatted) to the first selected key, or NULL when nothing is selected.
 

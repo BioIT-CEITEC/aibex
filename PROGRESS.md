@@ -20,7 +20,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
 - [x] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
 - [x] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
-- [ ] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
+- [x] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
 - [ ] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
 - [ ] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
 - [ ] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
@@ -70,6 +70,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T15b · done · `aibex/panel_data.py`: `panel_data(spec, bundle, panel_id)` for plot (x/y/color/size via
+  field or compiled `expr`, `label` text column for `values` (case-insensitive) or `top_n` by `by` among filtered rows,
+  `facet`, key column) and table panels (listed columns + key appended if missing, spec sort then key); filters as
+  bound parameters (`==`→`=`, `between`, `in`, case-insensitive `contains`) or compiled `expr`, on the panel's table
+  and one hop through links in both directions (semi-join). Labelled rows sort first so the 5000 cap keeps them.
+  `POST /sessions/{sid}/panel-data` (404 unknown panel/session, 501 pca/heatmap → T15c, widget → T40a, 400 query
+  error). `expr.py`: `log*`/`ln` of ≤ 0 and `sqrt` of < 0 now give NULL instead of a DuckDB error (one `padj = 0` row
+  would break the whole volcano). Note for T32: genes with `padj = 0` get `y = null` in `-log10(padj)` and are not
+  drawn – the ADAR2 default view may want to cap them. Large DE tables (> 5000 genes) are truncated in plots (labelled
+  rows kept) – consider raising the cap or filtering in the converter (T31). docs/api.md updated. Tests:
+  `tests/test_panel_data.py` (22); `make test` 276 pass; phase-1 acceptance all 34 pass; phase-2 A2.1 still pass,
+  others need `aibex.llm.provider` (T21a+). No frontend → no e2e. No new dependencies. Note: Bash `python -c` and
+  heredocs are refused by the runner, so ad-hoc checks went into unit tests.
 - 2026-11-21 · T15 · done · `aibex/sessions.py`: `SessionStore` (in memory, thread-safe, max 200 sessions) and
   `Session` = undo stack of applied specs + pointer, flat `history` `{version, summary, source}`; `apply_patch(patch,
   summary, source)` (jsonpatch on a copy → `validate_spec`; `PatchError.errors` are repairable messages for T22a),

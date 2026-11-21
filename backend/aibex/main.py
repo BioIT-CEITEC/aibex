@@ -17,6 +17,7 @@ from aibex import __version__
 from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
 from aibex.default_view import default_view
+from aibex.panel_data import PanelDataUnsupported, PanelNotFound, panel_data
 from aibex.query import QueryError, run_query
 from aibex.sessions import NothingToUndo, PatchError, Session, SessionNotFound, SessionStore
 from aibex.spec import parse_spec
@@ -35,6 +36,11 @@ class SessionRequest(BaseModel):
 class PatchRequest(BaseModel):
     patch: Any
     summary: str | None = None
+
+
+class PanelDataRequest(BaseModel):
+    panel_id: str
+    selection: list[Any] | None = None  # used by widget inputs ($selected, T40a); plot/table panels ignore it
 
 
 class StepsRequest(BaseModel):
@@ -127,6 +133,24 @@ def _api_router() -> APIRouter:
     @router.post("/sessions/{sid}/redo")
     def redo_session(sid: str, request: Request, body: StepsRequest | None = None) -> dict:
         return _move(request, sid, "redo", (body or StepsRequest()).steps)
+
+    @router.post("/sessions/{sid}/panel-data")
+    def session_panel_data(sid: str, body: PanelDataRequest, request: Request) -> dict:
+        """Rows of one panel of the current spec with filters applied (max 5000); unknown panel 404."""
+        s = get_session(request, sid)
+        with s.lock:
+            data = s.spec
+        spec, errors = parse_spec(data)
+        if spec is None:  # cannot happen for a stored (validated) spec; never crash on it
+            raise HTTPException(status_code=500, detail="; ".join(errors))
+        try:
+            return panel_data(spec, s.bundle, body.panel_id)
+        except PanelNotFound:
+            raise HTTPException(status_code=404, detail=f"unknown panel {body.panel_id!r}") from None
+        except PanelDataUnsupported as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from None
+        except ValueError as exc:  # PanelDataError, ExprError
+            raise HTTPException(status_code=400, detail=str(exc)) from None
 
     return router
 
