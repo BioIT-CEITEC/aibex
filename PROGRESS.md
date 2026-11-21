@@ -31,7 +31,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
 - [x] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
 - [x] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
-- [ ] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline (after: T11)
+- [x] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline (after: T11)
 
 ## Phase 2 – prompt editing
 - [ ] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
@@ -70,6 +70,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T19 · done (A1.7 manual check passed) · `scripts/make_airway_bundle.py` (PEP 723 deps: pydeseq2,
+  pandas, pyarrow, pyyaml, certifi – script only, nothing added to the backend). Source: count table, sample sheet and
+  GRCh38 annotation as CSV from the public bioconnector workshop repo (derived from the Bioconductor `airway` package,
+  GSE52778) → no R needed; downloads cached in `<out>/source/` (certifi CA bundle, since the uv Python failed SSL
+  verification without it). pydeseq2 `~cell + dex`, treated vs control, genes with ≥10 reads in total → 19 271 genes,
+  815 with padj < 0.05 and |log2FC| ≥ 1; known dex genes up as expected (ZBTB16 +5.9, KLF15 +4.4, FKBP5 +4.0, DUSP1
+  +3.0, PER1 +2.9). Bundle `data/airway/` (2.4 MB tables, gitignored): `de` (gene_name, biotype, chrom/start/end,
+  description, DESeq2 columns), `counts` (normalised matrix), `samples.tsv` (sample, dex, cell, geo_id – `dex` first
+  so PCA/heatmap group by treatment), link counts→de. Checked: bundle listed, generated default view validates with no
+  errors, panel-data 200 for all 5 panels. Follow-up: volcano/MA/table panel-data is `truncated` (19 271 rows > the
+  5000 cap) – the volcano shows only 5000 genes; consider an ORDER BY padj before the cap or a higher cap for plots.
+  Checks: `make test` 290 pass; phase-1 acceptance 34 pass; ruff check/format clean on the script. Not a UI task (no
+  e2e). Run: `uv run scripts/make_airway_bundle.py [--out DIR]`.
 - 2026-11-22 · T18 · done · M1 visual pass on the toy default view at 1440×900. New e2e `e2e/visual.spec.ts`: ≥4
   frames, all four plots drawn, table rows, no panel error/banner, no horizontal page scroll, frames do not overlap,
   each plot's svg inside its frame and > 150 px high; writes `logs/screens/M1-viewport-1440x900.png` and
