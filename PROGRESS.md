@@ -4,23 +4,23 @@ Task list for interactive and overnight work. One task = one focused change of a
 passing tests and a commit. The overnight agent takes the **first `[~]` task, else the first `[ ]` task, whose
 `after:` tasks are all `[x]`**, and skips tasks marked "– Vojta".
 Status markers: `- [ ]` todo · `- [x]` done · `- [!]` blocked (reason in the Log) · `- [~]` partly done (see Log).
-IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "Qn" = open question in the Log.
+IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "Qn" = decision recorded in the Log.
 
 ## Phase 0 – setup (interactive, before the first overnight run)
 - [ ] T00 Phase 0 deploy done (pod running, URL works) – Vojta
 - [ ] T01 Node 22+, `uv`, Playwright browsers installed on the Mac (`npx playwright install chromium`); `node`/`npx` on the PATH Claude Code sees (the Playwright MCP currently fails: npx not found) – Vojta
 - [ ] T02 Acceptance kit copied into the repo; planning session reviewed this list – Vojta
-- [ ] T03 Answer the open questions Q1–Q9 at the top of the Log; update docs/api.md "(proposed)" items accordingly – Vojta
+- [x] T03 Answer the open questions Q1–Q9 (answers in the Log; docs and tests updated) – Vojta
 
 ## Phase 1 – bundles + dashboard
 - [ ] T10 `create_app()` factory + `Settings.llm_provider` per docs/api.md; keep `app = create_app()`; `make test` passes
 - [ ] T11 Bundle loading: DuckDB connection per bundle, a view/table per bundle table, inferred column types (bundle vocabulary), links → `GET /bundles`, `/bundles/{id}/schema` [A1.1, A1.2] (after: T10)
 - [ ] T12 Read-only query endpoint: statement-type guard (`duckdb.extract_statements`, no new dependency), forbidden table functions, external access disabled + config locked after setup, limit/clamp/`row_count`/`truncated` [A1.3] (after: T11)
 - [ ] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
-- [ ] T13b Semantic validation against the bundle schema + `expr` parser/allow-list + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
+- [ ] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
 - [ ] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
 - [ ] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
-- [ ] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with filters (same table; linked tables if Q2 = yes) [A1.6] (after: T15)
+- [ ] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
 - [ ] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
 - [ ] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
 - [ ] T16b Move `frontend-e2e/*` into `frontend/` (`playwright.config.ts`, `e2e/`), `@playwright/test` dev dep; `make e2e` runs (specs may fail until their tasks) (after: T16a)
@@ -31,7 +31,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [ ] T17d Filters bar: checkbox per filter (`filter-<id>`) → patch with source `user` (after: T17a)
 - [ ] T17e Linked selection across panels by `selection.key` (click/lasso, highlight) + layout drag/resize written back as a patch (after: T17b)
 - [ ] T18 M1 visual pass at 1440×900: screenshots into `logs/screens/`, fix obvious layout issues [M1] (after: T17c, T17d, T17e)
-- [ ] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline; wait for Q5 (after: T11)
+- [ ] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline (after: T11)
 
 ## Phase 2 – prompt editing
 - [ ] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
@@ -42,20 +42,20 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [ ] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
 - [ ] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
 - [ ] T25 Live check with the real model (`make accept-live`, ≤3 runs, A2.5); tune the system prompt; results + latency in the Log (after: T23)
-- [ ] T26 M2: demo prompts 1–3 and 6 with the real model on airway (or toy, Q5); latency in the Log – Vojta (after: T24b, T25)
+- [ ] T26 M2: demo prompts 1–3 and 6 with the real model on the ADAR2 bundle; latency in the Log – Vojta (after: T24b, T25, T32)
 - [ ] T27 Morning review: merge Phases 1–2 to `main`, push, `make restart` – Vojta
 
 ## Phase 3 – ADAR2
-- [ ] T29 Put the ADAR2 pipeline outputs at `$AIBEX_DATA_DIR/../raw/adar2-editing` and answer Q3, Q7, Q9 – Vojta
-- [ ] T30 Inspect `raw/adar2-editing` (file list, headers, row counts only unless Q3 allows more); write assumptions to `data/adar2-notes.md` (outside git); do not copy raw files (after: T29)
-- [ ] T31 `scripts/convert_adar2.py` → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables, incl. per-gene editing summary columns in `de` if Q4 = precompute [A3.1, A3.2] (after: T30, T11)
+- [ ] T29 Put the ADAR2 results at `$AIBEX_DATA_DIR/../raw/adar2-editing`: expression results (DE table, RSEM), editing result tables/counts, and the R analysis code – Vojta
+- [ ] T30 Inspect `raw/adar2-editing` freely (data are published): read the R code to learn the filters/normalisation, map files → bundle tables; write assumptions, file sizes and the planned preprocessing to `docs/adar2-notes.md` (in git, no data rows beyond a few examples); do not copy raw files (after: T29)
+- [ ] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); no genome needed [A3.1, A3.2] (after: T30, T11)
 - [ ] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
 - [ ] T33 M3: confirm the assumptions in `data/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
 
 ## Phase 4 – Level 2 widgets
 - [ ] T40a Widget validation (code size/blocklist, input SQL read-only) + `panel-data` input resolution with `$selected` as a bound parameter [A4.2, A4.3] (after: T13b, T15b)
 - [ ] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
-- [ ] T41a Iframe runtime: srcdoc with CSP + inlined React, postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
+- [ ] T41a Iframe runtime: srcdoc with CSP + inlined React and Plotly (minified dist), postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
 - [ ] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
 - [ ] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
 
@@ -71,21 +71,18 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
 
-### Open questions for Vojta (answer in T03 / T29; then delete or mark answered)
-- **Q1 expr grammar.** Allow comparisons, `AND/OR/NOT`, string literals and `CASE WHEN` in `expr` (needed to colour the
-  volcano by significance), and `expr` in filters (needed for demo prompt 2, `|log2FC| > 1`)? Proposed: yes to both.
-- **Q2 filter reach.** Should a filter on `de` also filter panels on linked tables (counts heatmap, editing sites) via the
-  bundle `links`? Proposed: yes (makes "everywhere" in demo prompt 2 true). If yes, add a phase-1 acceptance test.
-- **Q3 ADAR2 privacy vs the coding agent.** The overnight agent runs on the Anthropic API: anything it reads from the raw
-  ADAR2 files leaves the machine. OK to read file names, headers and a few rows? Or only names/headers/row counts?
-- **Q4 Demo prompt 4 (colour volcano by editing change).** Precompute per-gene editing summary columns into `de`
-  (`n_edit_sites`, `mean_delta`, `max_abs_delta`) in the converter (proposed, no spec change), or support linked
-  aggregate fields in the spec (`{"field": "editing.delta", "agg": "mean"}`)?
-- **Q5 Airway bundle.** Keep the public airway dataset for M2 (where should counts come from — e.g. the GEO/Bioconductor
-  airway counts — and is a standalone script with pydeseq2 fine)? Or run M2 on the toy bundle and skip T19?
-- **Q6 Version granularity.** One version per applied tool call (current tests) or one version per chat message (a prompt
-  that makes two edits undoes as one)? Proposed: keep per tool call for now.
-- **Q7 ADAR2 sizes.** Roughly how many editing sites / rows per table? Decides whether tables are loaded into memory
-  (simplest, safest query guard) or queried from parquet.
-- **Q8 Widget runtime libraries.** React only inside the sandbox, or also Plotly (~3 MB inlined per widget)?
-- **Q9 Genome build** and annotation version for the ADAR2 `bundle.yaml` (`genome:` field).
+### Decisions (Vojta, 2026-11-21) – answers to Q1–Q9
+- **Q1 expr grammar:** yes to both – comparisons, `AND/OR/NOT`, string literals, `CASE WHEN` in `expr`; filters may use a
+  boolean `expr`. → docs/api.md, spec-format.md, tests `test_validate_accepts_boolean_expr_in_color_and_filter`, `test_panel_data_filter_expr`.
+- **Q2 filter reach:** yes, filters apply everywhere through bundle links. → docs/api.md, test `test_panel_data_filter_propagates_via_link`.
+- **Q3 ADAR2 privacy:** not needed – the data are published; agents may read whatever they need. Sufficient inputs:
+  the expression results, the resulting editing tables/counts, the R analysis code and the RSEM results.
+  Focus is visualisation, not re-analysis.
+- **Q4 demo prompt 4:** precompute – most things for the views are precomputed in the converter (per-gene editing columns in `de`).
+- **Q5 airway:** keep the public airway script (T19), but run the demo checks (M2) on the ADAR2 bundle.
+- **Q6 versions:** one version per applied tool call (as now).
+- **Q7 sizes:** ~4000 realistically edited sites, but the raw files can be big → preprocess/filter in the converter,
+  following Vojta's R code; final tables are small enough to load into memory.
+- **Q8 widget libraries:** React and Plotly inside the sandbox.
+- **Q9 genome:** organism is mouse (*Mus musculus*); build GRCm38/GRCm39 – take the exact one from the R code in T30.
+  Informative only: nothing in the app uses the genome, only the result tables.

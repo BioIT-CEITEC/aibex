@@ -35,7 +35,9 @@ patched spec with Pydantic (`backend/aibex/spec.py`) and rejects anything invali
 {"id": "sig", "table": "de", "field": "padj", "op": "<=", "value": 0.05, "label": "padj ≤ 0.05", "enabled": true}
 ```
 `op`: `<=`, `>=`, `<`, `>`, `==`, `!=`, `in`, `between` (value = [min, max]), `contains`.
-`label` is optional. Which panels a filter reaches (same table; linked tables – proposed) is defined in `docs/api.md` → "Filters".
+Instead of `field`/`op`/`value` a filter may give a boolean `expr`, e.g.
+`{"id": "lfc", "table": "de", "expr": "abs(log2FoldChange) > 1", "label": "|log2FC| > 1", "enabled": true}`.
+`label` is optional. A filter also reaches panels on tables linked to its table (`docs/api.md` → "Filters").
 
 ## Panels
 
@@ -51,7 +53,7 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
   "kind": "scatter",
   "x": {"field": "log2FoldChange", "label": "log2 FC"},
   "y": {"expr": "-log10(padj)", "label": "-log10 padj"},
-  "color": {"field": "padj", "colorscale": "Viridis"},
+  "color": {"expr": "CASE WHEN padj < 0.05 THEN 'significant' ELSE 'n.s.' END", "palette": {"significant": "#d62728", "n.s.": "#bbbbbb"}},
   "size": null,
   "label": {"field": "gene_name", "values": ["Gria2", "Cyfip2"], "top_n": 10, "by": "padj"},
   "facet": null,

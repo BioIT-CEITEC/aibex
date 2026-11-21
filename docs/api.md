@@ -2,8 +2,7 @@
 
 These contracts are what the acceptance tests (`backend/tests/acceptance/`, Playwright e2e in `frontend-e2e/e2e/`,
 moved to `frontend/e2e/` by task T16b) check. Change them only together with the tests and this file.
-Items marked **(proposed – Q<n>)** wait for a decision listed at the top of the `PROGRESS.md` Log; implement them as written
-unless the answer says otherwise.
+Decisions behind some rules are recorded as Q1–Q9 in the `PROGRESS.md` Log.
 
 ## App factory and settings
 - `aibex.config.Settings` – dataclass; fields at least `data_dir: Path`, `frontend_dist: Path`, `llm_base_url`, `llm_api_key`,
@@ -56,8 +55,7 @@ class LLMProvider(Protocol):
 - A failed `update_view` / `create_widget` returns the validation errors to the LLM as the tool result; after
   **2 failed attempts in a row** the loop stops with an `error` event (no further provider call) and the spec is unchanged
   by the failed calls.
-- Each applied `update_view` / `create_widget` / `undo_view` is one new version with `source: "llm"` **(proposed – Q6:
-  one version per chat message instead)**.
+- Each applied `update_view` / `create_widget` / `undo_view` is one new version with `source: "llm"` (decided, Q6).
 - Privacy rule: no tool result may contain more than **200 rows**; `describe_bundle` returns schema + summary stats only.
   The provider must never receive whole tables.
 
@@ -113,17 +111,19 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   input SQL is bound (as a parameter, never string-formatted) to the first selected key, or NULL when nothing is selected.
 
 ## Filters
-- A filter applies to every panel whose table is the filter's `table`.
-- **(proposed – Q2)** It also applies to panels whose table is joined to the filter's table by a bundle `link`
-  (semi-join on the link key), so "everywhere" filters reach e.g. the counts heatmap and the editing panels.
+- A filter is either `{id, table, field, op, value, label?, enabled}` or `{id, table, expr, label?, enabled}` where `expr`
+  is a boolean expression (grammar below), e.g. `abs(log2FoldChange) > 1`.
+- A filter applies to every panel whose table is the filter's `table`, and also to panels whose table is joined to the
+  filter's table by a bundle `link` (semi-join on the link key), so "everywhere" filters reach e.g. the counts heatmap
+  and the editing panels (decided, Q2). Links are followed in both directions, one hop.
 
 ## Spec validation rules (422 / `valid: false` when violated)
 - panel ids unique, kebab-case; every panel has exactly one layout item and every layout item a panel
 - `table` / `field` references must exist in the bundle schema (`expr` columns too); filter `field`s too
-- `expr` grammar: column names, numbers, unary minus, `+ - * / ( )` and the functions log, log2, log10, ln, abs, sqrt,
-  round, least, greatest, coalesce. Nothing else (no subqueries, no other functions, no string literals).
-  **(proposed – Q1)** add comparisons `< <= > >= = !=`, `AND OR NOT`, string literals and `CASE WHEN … THEN … ELSE … END`,
-  and allow `expr` instead of `field` in filters.
+- `expr` grammar (decided, Q1): column names, numbers, single-quoted string literals, `NULL`, `TRUE`, `FALSE`, unary minus,
+  `+ - * / ( )`, comparisons `< <= > >= = != <>`, `AND OR NOT`, `IS [NOT] NULL`, `CASE WHEN … THEN … [ELSE …] END`, and the
+  functions log, log2, log10, ln, abs, sqrt, round, least, greatest, coalesce. Nothing else (no subqueries, no other
+  functions, no casts, no `;`). Validate by parsing (e.g. a small tokenizer + allow-list), never by regex on the whole string.
 - widget `code` ≤ 50 000 characters; must not contain `fetch(`, `XMLHttpRequest`, `WebSocket`, `importScripts`, `document.cookie`, `localStorage`
 - widget input `sql` must pass the read-only query guard
 - `plotly` overrides are plain JSON (no functions)
@@ -138,8 +138,9 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
 - Rendered as `<iframe sandbox="allow-scripts" srcdoc="…">` (exactly `allow-scripts`, never `allow-same-origin`).
 - The srcdoc starts with `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline';
   style-src 'unsafe-inline'; img-src data: blob:">` – the sandbox alone does not block network access.
-- React is inlined into the srcdoc (no CDN). The parent compiles TSX (sucrase) and sends code + data via `postMessage`;
-  the widget calls `onSelect(keys)` which is posted back to the parent.
+- React and Plotly (decided, Q8; use a minified dist such as `plotly.js-basic-dist-min`) are inlined into the srcdoc
+  (no CDN – the CSP forbids it); the widget gets them as `React` and `Plotly`. The parent compiles TSX (sucrase) and sends
+  code + data via `postMessage`; the widget calls `onSelect(keys)` which is posted back to the parent.
 - `create_widget` defaults `language` to `tsx`; a new panel is appended to the layout at the bottom (`w: 6, h: 8`).
   Same id as an existing widget replaces that widget (new version); same id as a non-widget panel is an error.
 

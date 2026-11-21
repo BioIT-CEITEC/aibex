@@ -136,6 +136,16 @@ def test_validate_good_spec(client):
     assert client.post("/api/validate-spec", json=_valid_spec()).json()["valid"] is True
 
 
+def test_validate_accepts_boolean_expr_in_color_and_filter(client):
+    # Q1: comparisons, AND/OR/NOT, string literals and CASE WHEN in expr; filters may use expr instead of field/op/value
+    s = _valid_spec()
+    s["panels"][0]["color"] = {"expr": "CASE WHEN padj < 0.05 AND abs(log2FoldChange) > 1 THEN 'sig' ELSE 'ns' END"}
+    s["filters"].append({"id": "lfc", "table": "de", "expr": "abs(log2FoldChange) > 1 OR NOT padj >= 0.01",
+                         "enabled": True})
+    v = client.post("/api/validate-spec", json=s).json()
+    assert v["valid"] is True, v
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
@@ -147,6 +157,9 @@ def test_validate_good_spec(client):
         lambda s: s["panels"][0]["y"].update(expr="read_csv('x')"),
         lambda s: s["panels"][0]["y"].update(expr="-log10(secret_col)"),
         lambda s: s["filters"].append({"id": "f", "table": "de", "field": "nope", "op": "<", "value": 1, "enabled": True}),
+        lambda s: s["filters"].append({"id": "f", "table": "de", "expr": "nope > 1", "enabled": True}),
+        lambda s: s["filters"].append({"id": "f", "table": "de", "expr": "padj < (SELECT 1)", "enabled": True}),
+        lambda s: s["panels"][0].update(color={"expr": "CASE WHEN read_csv('x') THEN 1 END"}),
     ],
 )
 def test_validate_rejects_bad_spec(client, mutate):
@@ -180,3 +193,38 @@ def test_panel_data_scatter_expr_and_filter(client, session, h):
 def test_panel_data_unknown_panel_404(client, session):
     r = client.post(f"/api/sessions/{session['session_id']}/panel-data", json={"panel_id": "nope"})
     assert r.status_code == 404
+
+
+def test_panel_data_filter_expr(client, session, h):
+    # Q1: a filter with a boolean expr, e.g. demo prompt 2 "|log2FC| > 1"
+    sid, spec = session["session_id"], session["spec"]
+    idx = h.first_scatter(spec)
+    pid, table = spec["panels"][idx]["id"], spec["panels"][idx]["table"]
+    n_all = len(client.post(f"/api/sessions/{sid}/panel-data", json={"panel_id": pid}).json()["rows"])
+    patch = [{"op": "add", "path": "/filters/-", "value": {"id": "lfc", "table": table,
+              "expr": "abs(log2FoldChange) > 1", "enabled": True}}]
+    assert client.post(f"/api/sessions/{sid}/patch", json={"patch": patch}).status_code == 200
+    n = len(client.post(f"/api/sessions/{sid}/panel-data", json={"panel_id": pid}).json()["rows"])
+    assert 0 < n < n_all
+
+
+def test_panel_data_filter_propagates_via_link(client, session):
+    # Q2: a filter on `de` also filters panels on tables linked to `de` (editing.gene_id -> de.gene_id)
+    sid = session["session_id"]
+    add = [
+        {"op": "add", "path": "/panels/-", "value": {"id": "sites", "type": "table", "title": "Sites", "table": "editing",
+                                                     "columns": ["site_id", "gene_id", "delta"]}},
+        {"op": "add", "path": "/layout/-", "value": {"i": "sites", "x": 0, "y": 100, "w": 6, "h": 8}},
+    ]
+    assert client.post(f"/api/sessions/{sid}/patch", json={"patch": add}).status_code == 200, "add editing table"
+    n_all = len(client.post(f"/api/sessions/{sid}/panel-data", json={"panel_id": "sites"}).json()["rows"])
+    assert n_all == 300
+    flt = [{"op": "add", "path": "/filters/-", "value": {"id": "sig", "table": "de", "field": "padj", "op": "<",
+            "value": 0.001, "enabled": True}}]
+    assert client.post(f"/api/sessions/{sid}/patch", json={"patch": flt}).status_code == 200
+    rows = client.post(f"/api/sessions/{sid}/panel-data", json={"panel_id": "sites"}).json()["rows"]
+    assert 0 < len(rows) < n_all
+    # every remaining site belongs to a gene that passes the filter
+    sig = {r[0] for r in client.post("/api/bundles/toy/query",
+                                    json={"sql": "SELECT gene_id FROM de WHERE padj < 0.001"}).json()["rows"]}
+    assert {r[1] for r in rows} <= sig

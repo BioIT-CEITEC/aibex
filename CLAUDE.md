@@ -44,7 +44,7 @@ data/         LOCAL ONLY, gitignored. Bundles live here or under AIBEX_DATA_DIR.
 
 ## Rules
 - Secrets: never read, print or commit `.env`. Never put keys in code, manifests or logs. `.env.example` documents the variables.
-- Data: `data/` and any real dataset are gitignored. The ADAR2 data are unpublished – never commit them, never paste their contents into issues/PRs.
+- Data: `data/` and any real dataset are gitignored; never commit data files. The ADAR2 data are published, so agents may read them freely (Vojta, 2026-11-21); still keep large files out of git and out of issues/PRs. Converters precompute what the views need; the app only reads result tables.
 - Kubernetes: only namespace `bystry-ns`. Never `kubectl delete` anything you did not create in this repo; ask before `apply`. Pods must follow the security context in `deploy/k8s/deployment.yaml` (non-root, drop ALL, seccomp RuntimeDefault, explicit limits).
 - Keep dependencies modest; ask before adding heavy frameworks.
 - After UI work, check it visually with the Playwright MCP (screenshot the page) before saying it works.

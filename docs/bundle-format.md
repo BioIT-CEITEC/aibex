@@ -21,7 +21,7 @@ title: ADAR2-KO mouse – RNA-seq and RNA editing
 description: >
   Differential expression and A-to-I editing in ADAR2 knockout vs wild type mice.
 organism: Mus musculus
-genome: GRCm39            # (?) fill in the real build
+genome: GRCm39            # mouse build used in the analysis (GRCm38/39 – take it from the R code); informative only
 modalities: [rna-seq, rna-editing]
 contrast: {name: KO_vs_WT, numerator: KO, denominator: WT}
 samples: samples.tsv
@@ -64,7 +64,8 @@ annotations (e.g. `genotype`, `batch`). Used for PCA colours and heatmap groupin
   named as in `samples.tsv`. Such tables need not declare the sample columns; they are used by `pca` and `heatmap` panels.
 - `key` columns must be unique within a table.
 - `links` declare joinable keys; the backend creates DuckDB views so the LLM can join modalities.
-- Bundles with real/unpublished data are **never** committed. Locally they live under `data/` or `AIBEX_DATA_DIR`;
+- Bundle data files are **never** committed (size; unpublished data in future projects). Locally they live under `data/` or `AIBEX_DATA_DIR`;
   on the cluster on the PVC mounted at `/data`.
-- A converter script per source format lives in `scripts/` (e.g. `scripts/convert_adar2.py`).
+- A converter script per source format lives in `scripts/` (e.g. `scripts/convert_adar2.py`). Converters precompute
+  everything the views need (summaries, per-gene aggregates, filtered site lists); the app only reads result tables.
 - `views/` inside the bundle holds `default.json` (optional) and the saved views written by the app (`views/<name>.json`).
