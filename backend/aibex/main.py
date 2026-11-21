@@ -11,13 +11,14 @@ from typing import Any
 from fastapi import APIRouter, Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from aibex import __version__
 from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
 from aibex.default_view import default_view
 from aibex.query import QueryError, run_query
+from aibex.sessions import NothingToUndo, PatchError, Session, SessionNotFound, SessionStore
 from aibex.spec import parse_spec
 from aibex.validate import validate_spec
 
@@ -25,6 +26,19 @@ from aibex.validate import validate_spec
 class QueryRequest(BaseModel):
     sql: str
     limit: int | None = None
+
+
+class SessionRequest(BaseModel):
+    bundle: str
+
+
+class PatchRequest(BaseModel):
+    patch: Any
+    summary: str | None = None
+
+
+class StepsRequest(BaseModel):
+    steps: int = Field(default=1, ge=1, le=1000)
 
 
 def get_settings(request: Request) -> Settings:
@@ -83,7 +97,60 @@ def _api_router() -> APIRouter:
         _, errors = validate_spec(data, bundle)
         return {"valid": not errors, "errors": errors}
 
+    @router.post("/sessions")
+    def create_session(body: SessionRequest, request: Request) -> dict:
+        """New in-memory session starting from the bundle's default view (version 0, history source `init`)."""
+        bundle = get_bundle(request, body.bundle)
+        registry = get_registry(request)
+        s = get_sessions(request).create(bundle.id, default_view(bundle), registry.get)
+        return {"session_id": s.session_id, "spec": s.spec, "version": s.version}
+
+    @router.get("/sessions/{sid}")
+    def get_session_state(sid: str, request: Request) -> dict:
+        return get_session(request, sid).state()
+
+    @router.post("/sessions/{sid}/patch")
+    def patch_session(sid: str, body: PatchRequest, request: Request) -> dict:
+        """Apply a validated JSON Patch as source `user`; 422 `{detail: {errors}}` and no change when invalid."""
+        s = get_session(request, sid)
+        try:
+            with s.lock:
+                spec = s.apply_patch(body.patch, body.summary, source="user")
+                return {"spec": spec, "version": s.version}
+        except PatchError as exc:
+            raise HTTPException(status_code=422, detail={"errors": exc.errors}) from None
+
+    @router.post("/sessions/{sid}/undo")
+    def undo_session(sid: str, request: Request, body: StepsRequest | None = None) -> dict:
+        return _move(request, sid, "undo", (body or StepsRequest()).steps)
+
+    @router.post("/sessions/{sid}/redo")
+    def redo_session(sid: str, request: Request, body: StepsRequest | None = None) -> dict:
+        return _move(request, sid, "redo", (body or StepsRequest()).steps)
+
     return router
+
+
+def _move(request: Request, sid: str, direction: str, steps: int) -> dict:
+    """Undo/redo by `steps` (clamped to what is available); 409 when there is nothing to undo/redo."""
+    s = get_session(request, sid)
+    try:
+        with s.lock:
+            spec = s.undo(steps) if direction == "undo" else s.redo(steps)
+            return {"spec": spec, "version": s.version}
+    except NothingToUndo as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+def get_sessions(request: Request) -> SessionStore:
+    return request.app.state.sessions
+
+
+def get_session(request: Request, sid: str) -> Session:
+    try:
+        return get_sessions(request).get(sid)
+    except SessionNotFound:
+        raise HTTPException(status_code=404, detail=f"unknown session {sid!r}") from None
 
 
 def get_registry(request: Request) -> BundleRegistry:
@@ -121,6 +188,7 @@ def create_app(settings: Settings | None = None, llm_provider: Any | None = None
     app.state.settings = settings
     app.state.llm_provider = llm_provider
     app.state.bundles = BundleRegistry(settings.data_dir)
+    app.state.sessions = SessionStore()
     app.include_router(_api_router())
 
     if settings.frontend_dist.exists():

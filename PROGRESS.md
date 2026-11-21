@@ -19,7 +19,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T13a Pydantic spec models for all panel types (plot incl. pca/heatmap fields, table, text, widget), filters, layout; structural checks (kebab-case unique ids, layout ↔ panels) (after: T10)
 - [x] T13b Semantic validation against the bundle schema + `expr` parser/allow-list (boolean grammar incl. CASE, expr filters) + widget code/SQL checks; `POST /validate-spec` [A1.5] (after: T11, T12, T13a)
 - [x] T14 Default view generator (volcano first with `label`, MA, PCA, top-genes heatmap, table; column roles by common names) [A1.4] (after: T13b)
-- [ ] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
+- [x] T15 Sessions (in memory) + spec store: `POST /sessions`, `GET /sessions/{sid}`, `patch` (422), `undo`/`redo` (409), history with `source` [A2.1 tests: `test_session_*`, `test_*patch*`, `test_undo_*`, `test_new_change_clears_redo`] (after: T14)
 - [ ] T15b `panel-data` for plot (field/expr axes, color/size/label, key column) and table panels with field and `expr` filters, also propagated through bundle links [A1.6] (after: T15)
 - [ ] T15c `panel-data` for `pca` and `heatmap` (matrix tables, samples.tsv, scale) + unit tests on the toy bundle (after: T15b)
 - [ ] T16a Frontend scaffold: Vite + React + TS + Tailwind (+ shadcn/ui base), eslint, `typecheck`/`lint` scripts, `/api` proxy to 8000; `make test` runs them (after: T01)
@@ -70,6 +70,15 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-21 · T15 · done · `aibex/sessions.py`: `SessionStore` (in memory, thread-safe, max 200 sessions) and
+  `Session` = undo stack of applied specs + pointer, flat `history` `{version, summary, source}`; `apply_patch(patch,
+  summary, source)` (jsonpatch on a copy → `validate_spec`; `PatchError.errors` are repairable messages for T22a),
+  `undo`/`redo(steps)` (clamped; `NothingToUndo` only when nothing is possible), `replace_spec` (for load-view, T51).
+  Sessions resolve their bundle by id on each use (the registry closes old connections on reload). Endpoints `POST
+  /sessions`, `GET /sessions/{sid}`, `POST …/patch` (422 `{detail: {errors}}`), `…/undo`, `…/redo` (409; body optional,
+  `steps ≥ 1`). docs/api.md: implementation details added. Tests: `tests/test_sessions.py` (31); `make test` 254 pass;
+  phase-2 A2.1 tests pass (6); phase-1: 31 pass, 3 fail = `panel-data` (T15b, expected); other phase-2 failures need
+  `aibex.llm.provider` (T21a+). No frontend → no e2e. No new dependencies (jsonpatch already listed).
 - 2026-11-21 · T14 · done · `aibex/default_view.py`: `find_role` (case-insensitive DESeq2/edgeR/limma names for
   fc/padj/pvalue/mean/name), `generate_default_view(bundle)` → volcano (first plot, `label: {field: name, values: []}`,
   significance colour via `expr`, quoted identifiers for names like `adj.P.Val`), MA (log10 of raw means), PCA +

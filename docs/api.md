@@ -94,6 +94,12 @@ Unknown session id → **404** everywhere.
 (patch, chat change, undo, redo, load-view). History is an undo stack with a pointer: undo/redo move the pointer by
 `steps` and record a new version; a new change after an undo drops the redo part. `history` lists every applied version
 in order (`summary` for undo/redo e.g. "undo 2").
+Implementation `aibex/sessions.py` (in memory, lost on restart, oldest dropped beyond 200 sessions): the initial entry
+is `{version: 0, summary: "initial view", source: "init"}`; `POST /patch` records `source: "user"` (default summary
+lists the ops); `steps` must be ≥ 1 (else 422) and is clamped to what can be undone/redone (`undo 5` with 2 changes
+undoes 2); 409 only when nothing at all can be undone/redone. The undo/redo body may be omitted (steps 1).
+A patch is applied to a copy and the result is validated structurally + semantically (as `/validate-spec`); a patch
+that cannot be applied (bad path, failed `test` op) is also a 422 with readable errors.
 
 ### Chat events
 SSE event types: `token` `{text}`, `tool` `{name, status}`, `spec` `{spec, version, summary}`, `error` `{message}`, `done` `{}`.
