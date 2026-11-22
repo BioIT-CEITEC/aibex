@@ -32,7 +32,7 @@ accept-live: ## live tests against the real e-INFRA model (reads .env; be nice t
 
 e2e: ## Playwright e2e (FakeProvider + toy bundle); make e2e ARGS=e2e/chat.spec.ts
 	@if [ -f frontend/playwright.config.ts ]; then cd frontend && npx playwright test $(ARGS); \
-	else echo "e2e not set up yet: frontend-e2e/ moves into frontend/ in task T16b"; exit 1; fi
+	else echo "e2e not set up: frontend/playwright.config.ts missing"; exit 1; fi
 
 eval-llm: ## compare LLMs on tool calling (reads .env)
 	uv run scripts/llm_eval.py $(ARGS)

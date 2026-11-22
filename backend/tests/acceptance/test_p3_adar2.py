@@ -63,6 +63,37 @@ def test_default_view_combines_modalities(real_client):
     tables = {p.get("table") for p in spec["panels"]}
     assert len(tables - {None}) >= 2, "default view should show both expression and editing"
     assert real_client.post("/api/validate-spec", json=spec).json()["valid"] is True
+    # T32: both modalities as panels (not just de + counts of the generic view), linked by the gene key, and every
+    # editing plot carries that key so its points take part in the linked selection
+    editing = {"editing"}
+    assert {"de", *editing} <= tables, f"expected expression and editing panels, got {sorted(tables - {None})}"
+    key = spec["selection"]["key"]
+    assert spec["selection"]["linked"] is True
+    sid = real_client.post("/api/sessions", json={"bundle": "adar2-editing"}).json()["session_id"]
+    for p in spec["panels"]:
+        r = real_client.post(f"/api/sessions/{sid}/panel-data", json={"panel_id": p["id"]})
+        assert r.status_code == 200, (p["id"], r.text)
+        d = r.json()
+        assert d["rows"], f"panel {p['id']} has no data"
+        if p.get("table") in editing and p["type"] == "plot":
+            assert key in d["columns"] and not d["truncated"], (p["id"], d["columns"])
+        if p.get("table") == "de" and p["type"] == "plot" and p.get("kind") not in ("pca", "heatmap"):
+            # T34: the whole DE table (~33 500 genes) fits under the plot cap – no gene silently missing
+            assert not d["truncated"], p["id"]
+
+
+def test_samples_genotype_and_treatment(real_client):
+    """A3.5 (T35): genotype × treatment design from the T33 answers is visible in the data and the default view."""
+    spec = real_client.get("/api/bundles/adar2-editing/default-view").json()
+    assert "ADAR2-KO vs WT" in spec["title"]
+    pca = next(p for p in spec["panels"] if p.get("kind") == "pca")
+    assert pca["color"]["field"] == "genotype" and pca["symbol"]["field"] == "treatment"
+    sid = real_client.post("/api/sessions", json={"bundle": "adar2-editing"}).json()["session_id"]
+    d = real_client.post(f"/api/sessions/{sid}/panel-data", json={"panel_id": pca["id"]}).json()
+    ti, gi = d["columns"].index("treatment"), d["columns"].index("genotype")
+    assert {r[ti] for r in d["rows"]} == {"perampanel", "placebo"}
+    assert {r[gi] for r in d["rows"]} == {"ADAR", "WT"}  # data values unchanged; only the wording says ADAR2-KO
+    assert "group" not in d["columns"], d["columns"]
 
 
 def test_raw_data_not_in_repo():

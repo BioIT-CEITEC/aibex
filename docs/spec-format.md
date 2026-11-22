@@ -28,6 +28,13 @@ patched spec with Pydantic (`backend/aibex/spec.py`) and rejects anything invali
 | `panels` | list of panels (plots, tables, text, widgets) |
 | `layout` | grid positions, react-grid-layout format, 12 columns |
 | `selection` | linked selection across panels by a shared key column |
+| `theme` | optional. `dark: true` switches the whole app (shell, plots, widgets) to the dark theme; `palette` is `"default"` (the only palette so far; unknown names render as `default`). The header's Light/Dark button patches `/theme/dark` with source `user`, so the theme is undoable and saved with a view. |
+
+Palette (`frontend/src/lib/palette.ts`, T53): 8 categorical colours in a fixed, colour-blind-safe order (validated for
+adjacent pairs in both themes; the dark theme uses the same hues stepped for the dark surface), a single-hue blue
+sequential scale and a blue ↔ grey ↔ red diverging scale. Plot backgrounds are transparent, so plots sit on the panel
+card in either theme. Explicit `palette` hex values in a spec are drawn as given in both themes, so prefer mid-lightness
+colours such as `#e34948` (red), `#2a78d6` (blue) and `#a8a7a0` (grey, recedes in both themes).
 
 ## Filters
 
@@ -53,7 +60,7 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
   "kind": "scatter",
   "x": {"field": "log2FoldChange", "label": "log2 FC"},
   "y": {"expr": "-log10(padj)", "label": "-log10 padj"},
-  "color": {"expr": "CASE WHEN padj < 0.05 THEN 'significant' ELSE 'n.s.' END", "palette": {"significant": "#d62728", "n.s.": "#bbbbbb"}},
+  "color": {"expr": "CASE WHEN padj < 0.05 THEN 'significant' ELSE 'n.s.' END", "palette": {"significant": "#e34948", "n.s.": "#a8a7a0"}},
   "size": null,
   "label": {"field": "gene_name", "values": ["Gria2", "Cyfip2"], "top_n": 10, "by": "padj"},
   "facet": null,
@@ -64,7 +71,14 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
 - An axis (and `color`, `size`) is either `{"field": ...}` or `{"expr": ...}`. `expr` is a restricted DuckDB SQL expression over the table's columns, validated server-side. The grammar (allowed operators and functions) is defined once in `docs/api.md` → "Spec validation rules".
 - `color` may carry a `palette` (`{value: colour}`, categorical) or a `colorscale` (Plotly name, continuous).
 - `label`: `values` are labelled explicitly; `top_n` + `by` label the top rows by a column (ascending). The first scatter of a generated default view always has a `label` object (possibly with empty `values`).
-- `plotly` holds optional raw Plotly layout/trace overrides (escape hatch; validated to be plain JSON).
+- `plotly` holds optional raw Plotly layout/trace overrides (escape hatch; validated to be plain JSON). The frontend
+  deep-merges `plotly.layout` and every other top-level key into the Plotly layout, and `plotly.trace` into every trace,
+  e.g. `{"layout": {"yaxis": {"type": "log"}}, "trace": {"marker": {"opacity": 0.5}}}`.
+- Rendering (frontend, `src/lib/plotFigure.ts`): a numeric `color` on scatter/line → continuous colour scale with a
+  colour bar (`colorscale`, default: the theme's blue sequential scale); otherwise one trace per colour value (legend;
+  `palette` keys match the value exactly, unknown values get the theme's categorical colours in order). The legend title is `color.label` or `color.field`, never
+  an `expr`. `size` scales markers to 4–16 px (scatter). Rows with a `label` text are annotated (max 60).
+  Above 1500 points scatter/line use WebGL. `facet` is not drawn yet.
 
 ### `pca`
 ```json
@@ -73,6 +87,9 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
 ```
 `table` is a matrix table (see bundle-format.md); PCA uses the `top_n` most variable rows (default 500) after `scale`
 (`none` | `log1p`, default `log1p`). `color.field` is a column of `samples.tsv`. Each point is a sample.
+Optional `symbol: {"field": <samples.tsv column>, "label"?}` (pca only) sets the marker shape per value of a second
+categorical annotation, e.g. `"color": {"field": "genotype"}, "symbol": {"field": "treatment"}`; the legend then has one
+entry per colour × shape combination.
 
 ### `heatmap`
 ```json

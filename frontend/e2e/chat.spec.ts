@@ -1,5 +1,5 @@
 // E2.* – prompt editing with the FakeProvider (LLM_PROVIDER=fake), history and undo (docs/acceptance.md)
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 async function send(page: Page, text: string) {
   await page.getByTestId('chat-input').fill(text);

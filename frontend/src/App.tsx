@@ -1,0 +1,63 @@
+import { useEffect } from 'react';
+import { BundleSelect } from '@/components/BundleSelect';
+import { ChatPanel } from '@/components/ChatPanel';
+import { Dashboard } from '@/components/Dashboard';
+import { ErrorBanner } from '@/components/ErrorBanner';
+import { FiltersBar } from '@/components/FiltersBar';
+import { UndoRedoButtons } from '@/components/History';
+import { SavedViews } from '@/components/SavedViews';
+import { SelectionBar } from '@/components/SelectionBar';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { useDocumentTheme } from '@/lib/useDocumentTheme';
+import { Spinner } from '@/components/ui/spinner';
+import { useAppStore } from '@/store';
+
+// App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
+// The main area is the panel grid (T17a) with the chat panel (T24a) on the right; undo/redo in the header and the
+// version history above the chat (T24b).
+export default function App() {
+  const bootstrap = useAppStore((s) => s.bootstrap);
+  const spec = useAppStore((s) => s.spec);
+  const version = useAppStore((s) => s.version);
+  const loading = useAppStore((s) => s.loading);
+  useDocumentTheme();
+
+  useEffect(() => {
+    void bootstrap(new URLSearchParams(window.location.search).get('bundle'));
+  }, [bootstrap]);
+
+  return (
+    <div className="flex min-h-screen flex-col">
+      <header className="flex items-center gap-4 border-b px-4 py-2">
+        <h1 className="shrink-0 whitespace-nowrap text-lg font-semibold">Aibex View</h1>
+        <span className="truncate text-sm text-muted-foreground">{spec?.title}</span>
+        <SelectionBar selectionKey={spec?.selection && spec.selection.linked !== false ? spec.selection.key : null} />
+        <div className="ml-auto flex shrink-0 items-center gap-4">
+          <BundleSelect />
+          <SavedViews />
+          <UndoRedoButtons />
+          <ThemeToggle />
+          <span className="text-sm text-muted-foreground">
+            version <span data-testid="spec-version">{version ?? '–'}</span>
+          </span>
+        </div>
+      </header>
+      <ErrorBanner />
+      <div className="flex flex-1 items-start">
+        <main className="min-w-0 flex-1 p-4">
+          {loading && !spec ? (
+            <p data-testid="app-loading" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Opening bundle…
+            </p>
+          ) : spec ? (
+            <>
+              <FiltersBar filters={spec.filters ?? []} />
+              <Dashboard spec={spec} />
+            </>
+          ) : null}
+        </main>
+        <ChatPanel />
+      </div>
+    </div>
+  );
+}

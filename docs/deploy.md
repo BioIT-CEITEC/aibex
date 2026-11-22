@@ -11,6 +11,11 @@ with a kubeconfig downloaded from Rancher (rancher.cloud.e-infra.cz → kuba-clu
 - Updating = push to GitHub, then `make restart`.
 - To deploy another branch for testing, change `GIT_BRANCH` in the deployment (or `kubectl set env`).
 - Later: replace with a prebuilt image (GHCR via GitHub Actions, or the OmiCZ Harbor + Fleet pipeline).
+- Production build (checked locally 2026-11-22, T54): `npm run build` (Node ≥ 22.12, Vite 8) writes `frontend/dist`
+  (~6.7 MB, mostly Plotly 4.6 MB and the inlined widget runtime 1.4 MB). uvicorn serves it at `/`
+  (`AIBEX_FRONTEND_DIST`), `/api/*` keeps priority. The app gzips responses ≥ 1 KB itself (ingress-nginx does not by
+  default), so the first page load is ~2 MB on the wire; chat SSE (`text/event-stream`) is never compressed.
+  No manifest change is needed. The build init container (node:22-slim, 3 Gi limit) is enough.
 
 ## First deployment
 ```bash

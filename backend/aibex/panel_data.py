@@ -1,0 +1,257 @@
+"""Panel data: the rows a panel shows, with the spec's filters applied (docs/api.md → "Panel data shape", "Filters").
+
+Every SQL string here is built from validated parts only: identifiers come from the (validated) spec and are
+quoted, `expr`s are compiled by aibex/expr.py (the raw string never runs) and filter values are bound parameters.
+
+- `plot` panels (scatter/line/bar/box/violin/histogram): columns `x`, `y` (when defined), `color`, `size`, `label`,
+  `facet` when set, plus the table key column (named as in the bundle) – preceded by the spec's `selection.key` column
+  when the table has it as a non-key column. `label` holds the label text for rows to be
+  labelled (explicit `values`, matched case-insensitively, or the `top_n` rows ascending by `by`), else NULL.
+  Plots are capped at 40 000 rows (tables at 5000): labelled rows first, then ascending by `label.by` or else the
+  table's padj / p-value column (nulls last), then by the key – so the cap drops the least interesting rows (T34).
+- `table` panels: the listed columns (all when omitted) in order, plus the key column at the end when not listed;
+  sorted as specified, then by the key.
+- `pca` / `heatmap` panels: computed from the matrix table in aibex/matrix_panels.py (filters applied first);
+  `widget` panels: `{inputs: {name: {columns, rows, truncated}}}` from aibex/widgets.py (`$selected` bound to the
+  first selected key; spec filters do not apply to free-form widget SQL).
+- `text` panels have no data (empty result).
+
+A filter applies to panels on its own table and, one hop through a bundle link in either direction, to panels on
+linked tables as a semi-join on the link columns (decided, Q2). Disabled filters are ignored.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import duckdb
+
+from aibex.bundles import Bundle
+from aibex.default_view import find_role
+from aibex.expr import compile_expr
+from aibex.matrix_panels import MatrixPanelError, heatmap_data, pca_data
+from aibex.query import QueryError, jsonable
+from aibex.spec import Filter, PlotPanel, Spec, TablePanel, TextPanel, WidgetPanel
+from aibex.widgets import resolve_inputs
+
+MAX_ROWS = 5000  # table panels (and widget inputs)
+MAX_PLOT_ROWS = 40000  # plot panels: a whole DE table fits (WebGL scatter); most interesting rows first (T34, Q11)
+
+_OPS = {"<=": "<=", ">=": ">=", "<": "<", ">": ">", "==": "=", "!=": "<>"}
+
+
+class PanelNotFound(KeyError):
+    pass
+
+
+class PanelDataUnsupported(ValueError):
+    """The panel type has no panel-data implementation yet."""
+
+
+class PanelDataError(ValueError):
+    """The query for the panel failed (message is safe to show)."""
+
+
+def q(name: str) -> str:
+    """Quoted SQL identifier."""
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _columns(bundle: Bundle, table: str) -> list[str]:
+    return list(bundle.tables[table]["columns"])
+
+
+def _expr_sql(bundle: Bundle, table: str, expr: str) -> str:
+    return compile_expr(expr, _columns(bundle, table)).sql
+
+
+def _filter_condition(bundle: Bundle, f: Filter, params: list) -> str:
+    """Boolean SQL for one filter over its own table (unqualified columns)."""
+    if f.expr is not None:
+        return f"({_expr_sql(bundle, f.table, f.expr)})"
+    col = q(f.field or "")
+    if f.op in _OPS:
+        params.append(f.value)
+        return f"{col} {_OPS[f.op]} ?"
+    if f.op == "between":
+        params.extend(f.value)
+        return f"{col} BETWEEN ? AND ?"
+    if f.op == "in":
+        params.extend(f.value)
+        return f"{col} IN ({', '.join('?' for _ in f.value)})"
+    if f.op == "contains":
+        params.append(f.value)
+        return f"contains(lower(CAST({col} AS VARCHAR)), lower(?))"
+    raise PanelDataError(f"filter {f.id!r}: unsupported op {f.op!r}")
+
+
+def _link_columns(bundle: Bundle, table: str, other: str) -> tuple[str, str] | None:
+    """(column of `table`, column of `other`) of the first bundle link between the two tables, either direction."""
+    for lk in bundle.links:
+        a_table, _, a_col = lk["from"].partition(".")
+        b_table, _, b_col = lk["to"].partition(".")
+        if a_table == table and b_table == other:
+            return a_col, b_col
+        if b_table == table and a_table == other:
+            return b_col, a_col
+    return None
+
+
+def filter_where(spec: Spec, bundle: Bundle, table: str) -> tuple[list[str], list]:
+    """WHERE conditions (AND-ed) and their parameters for panels on `table`."""
+    conds: list[str] = []
+    params: list = []
+    for f in spec.filters:
+        if not f.enabled or f.table not in bundle.tables:
+            continue
+        if f.table == table:
+            conds.append(_filter_condition(bundle, f, params))
+            continue
+        link = _link_columns(bundle, table, f.table)
+        if link is None:
+            continue
+        own, other = link
+        cond = _filter_condition(bundle, f, params)
+        conds.append(f"{q(own)} IN (SELECT {q(other)} FROM {q(f.table)} WHERE {cond})")
+    return conds, params
+
+
+def _encoding_sql(bundle: Bundle, table: str, enc: Any) -> str:
+    return q(enc.field) if enc.field is not None else f"({_expr_sql(bundle, table, enc.expr)})"
+
+
+def _plot_select(
+    p: PlotPanel, bundle: Bundle, key: str | None, sel_key: str | None = None
+) -> tuple[list[str], list[str], list, str]:
+    """(select expressions, output column names, params, ORDER BY) for a simple plot.
+
+    `sel_key`: the spec's linked-selection key when the panel's table has it as a non-key column (e.g. `gene_id` on a
+    table of editing sites). It comes before the table key, so the frontend uses it as the point key and the points
+    take part in the selection."""
+    exprs: list[str] = []
+    names: list[str] = []
+    params: list = []
+    rank = _rank_column(p, bundle)
+    for name in ("x", "y", "color", "size"):
+        enc = getattr(p, name)
+        if enc is not None:
+            exprs.append(_encoding_sql(bundle, p.table, enc))
+            names.append(name)
+    order = []
+    if p.label is not None:
+        lab = p.label
+        text = f"CAST({q(lab.field)} AS VARCHAR)"
+        hits = []
+        if lab.values:
+            hits.append(f"lower({text}) IN ({', '.join('?' for _ in lab.values)})")
+            params.extend(v.lower() for v in lab.values)
+        if lab.top_n and lab.by:
+            hits.append(f"row_number() OVER (ORDER BY {q(lab.by)} ASC NULLS LAST) <= {int(lab.top_n)}")
+        label_sql = f"CASE WHEN {' OR '.join(hits)} THEN {text} END" if hits else "CAST(NULL AS VARCHAR)"
+        exprs.append(label_sql)
+        names.append("label")
+        order.append('"label" IS NULL')
+    if p.facet is not None:
+        exprs.append(q(p.facet))
+        names.append("facet")
+    if sel_key is not None and sel_key != key and sel_key not in names:
+        exprs.append(q(sel_key))
+        names.append(sel_key)
+    if key is not None and key not in names:
+        exprs.append(q(key))
+        names.append(key)
+    if rank is not None:
+        # hidden helper column (dropped by the outer query): the source column may not be among the outputs
+        exprs.append(q(rank))
+        names.append(_RANK)
+        order.append(f"{q(_RANK)} ASC NULLS LAST")
+    if key is not None:
+        order.append(q(key))
+    return exprs, names, params, ", ".join(order)
+
+
+_RANK = "__aibex_rank"
+
+
+def _rank_column(p: PlotPanel, bundle: Bundle) -> str | None:
+    """Column that orders plot rows "most interesting first" before the row cap: `label.by` when set, else the
+    table's adjusted p-value / p-value column (by common names, as in the default view), else None."""
+    cols = _columns(bundle, p.table)
+    if p.label is not None and p.label.by in cols:
+        return p.label.by
+    return find_role(cols, "padj") or find_role(cols, "pvalue")
+
+
+def _table_select(p: TablePanel, bundle: Bundle, key: str | None) -> tuple[list[str], list[str], str]:
+    cols = list(p.columns) if p.columns else _columns(bundle, p.table)
+    if key is not None and key not in cols:
+        cols.append(key)
+    order = [f"{q(s.field)} {s.dir.upper()} NULLS LAST" for s in p.sort]
+    if key is not None and key not in [s.field for s in p.sort]:
+        order.append(q(key))
+    return [q(c) for c in cols], cols, ", ".join(order)
+
+
+def panel_data(spec: Spec, bundle: Bundle, panel_id: str, selection: list[Any] | None = None) -> dict:
+    """`{columns, rows, truncated}` for a panel (max 5000 rows; widgets `{inputs: {...}}`). `selection` is used only
+    by widget inputs (`$selected`). Raises PanelNotFound / PanelDataUnsupported / PanelDataError."""
+    panel = next((p for p in spec.panels if p.id == panel_id), None)
+    if panel is None:
+        raise PanelNotFound(panel_id)
+    if isinstance(panel, TextPanel):
+        return {"columns": [], "rows": [], "truncated": False}
+    if isinstance(panel, WidgetPanel):
+        try:
+            return resolve_inputs(panel, bundle, selection)
+        except QueryError as exc:
+            raise PanelDataError(f"panel {panel_id!r}: {exc}") from None
+    if not isinstance(panel, (PlotPanel, TablePanel)):
+        raise PanelDataUnsupported(f"panel data for {panel.type} panels is not implemented yet (task T40a)")
+    if panel.table not in bundle.tables:
+        raise PanelDataError(f"unknown table {panel.table!r}")
+    if isinstance(panel, PlotPanel) and panel.kind in ("pca", "heatmap"):
+        conds, where_params = filter_where(spec, bundle, panel.table)
+        try:
+            if panel.kind == "pca":
+                return pca_data(bundle, panel, conds, where_params)
+            return heatmap_data(bundle, panel, conds, where_params, _link_columns)
+        except MatrixPanelError as exc:
+            raise PanelDataError(f"panel {panel_id!r}: {exc}") from None
+
+    key = bundle.tables[panel.table].get("key")
+    if isinstance(panel, PlotPanel):
+        sel = spec.selection
+        sel_key = sel.key if sel is not None and sel.linked and sel.key in _columns(bundle, panel.table) else None
+        exprs, names, params, order = _plot_select(panel, bundle, key, sel_key)
+    else:
+        exprs, names, order = _table_select(panel, bundle, key)
+        params = []
+    conds, where_params = filter_where(spec, bundle, panel.table)
+
+    # the label window (top_n) must rank the filtered rows: filter in a subquery first
+    source = q(panel.table)
+    if conds:
+        source = f"(SELECT * FROM {q(panel.table)} WHERE {' AND '.join(conds)})"
+    sql = f"SELECT {', '.join(f'{e} AS {q(n)}' for e, n in zip(exprs, names, strict=True))} FROM {source} AS t"
+    if isinstance(panel, PlotPanel):
+        # plot ORDER BY refers to output columns (label, rank, key): order in an outer query to avoid name clashes;
+        # the outer query drops the hidden rank column
+        names = [n for n in names if n != _RANK]
+        outer = ", ".join(q(n) for n in names)
+        sql = f"SELECT {outer} FROM ({sql}) AS o" + (f" ORDER BY {order}" if order else "")
+    elif order:
+        sql += f" ORDER BY {order}"
+    cap = MAX_PLOT_ROWS if isinstance(panel, PlotPanel) else MAX_ROWS
+    sql += f" LIMIT {cap + 1}"
+    try:
+        # parameter order follows the SQL text: SELECT (label values) before the filter subquery
+        rows = bundle.cursor().execute(sql, params + where_params).fetchall()
+    except duckdb.Error as exc:
+        first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
+        raise PanelDataError(f"panel {panel_id!r}: query failed: {first}") from None
+    truncated = len(rows) > cap
+    return {
+        "columns": names,
+        "rows": [[jsonable(v) for v in r] for r in rows[:cap]],
+        "truncated": truncated,
+    }
