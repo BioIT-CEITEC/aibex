@@ -34,7 +34,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T19 `scripts/make_airway_bundle.py` with PEP 723 inline deps (pydeseq2 stays out of the backend), public airway data → `$AIBEX_DATA_DIR/airway/` [A1.7] – needs network; mark `[!]` if it fails offline (after: T11)
 
 ## Phase 2 – prompt editing
-- [ ] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
+- [x] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
 - [ ] T21b `FakeProvider` rules per docs/api.md + unit tests; provider selection in `create_app` (after: T21a)
 - [ ] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
 - [ ] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
@@ -70,6 +70,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T21a · done · `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider` (Protocol) exactly as
+  docs/api.md; `OpenAICompatibleProvider(base_url, api_key, model, client=…)` + `from_settings` (fast model; `model=`
+  override per call), temperature 0, `tools`/`tool_choice="auto"` only when tools are given, SDK `max_retries=1`,
+  timeout 120 s; converts SDK objects or dicts (`response_from_completion`); missing tool-call id → `call-<n>`,
+  nameless calls dropped, non-object/invalid JSON arguments → `{"_invalid_arguments": raw}` (fenced args tolerated) so
+  the tool can report it; any client error → `LLMError` (short message, no key). Fallback: `parse_text_fallback`
+  (fenced ```json / plain ``` blocks first, else bare objects via `raw_decode`; `{"tool", "arguments"}` incl.
+  double-encoded arguments, `{"patch", "summary"}` → `update_view`; ids `fallback-<n>`; never raises) and
+  `with_text_fallback(response)` for the chat loop (T22b) – the provider does not apply it itself, per docs/api.md.
+  Provider selection in `create_app` left to T21b. docs/api.md: implementation notes. Tests `tests/test_provider.py`
+  (30, mocked client, no network). Checks: `make test` 320 pass + typecheck/lint clean; phase-1 acceptance 34 pass;
+  phase-2: 6 pass, the 10 failing now all hit 405 on `/chat` (T22b, expected) instead of the missing module. No new
+  dependencies (`openai` was already listed). Not a UI task (no e2e).
 - 2026-11-22 · T19 · done (A1.7 manual check passed) · `scripts/make_airway_bundle.py` (PEP 723 deps: pydeseq2,
   pandas, pyarrow, pyyaml, certifi – script only, nothing added to the backend). Source: count table, sample sheet and
   GRCh38 annotation as CSV from the public bioconnector workshop repo (derived from the Bioconductor `airway` package,

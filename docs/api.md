@@ -39,6 +39,12 @@ class LLMProvider(Protocol):
   - `add widget` → `create_widget` id `row-count`, one input `{"name": "rows", "sql": "SELECT * FROM <first table of the bundle> LIMIT 50"}`, a tiny TSX widget showing the row count of that input
   - anything else → text reply "FakeProvider: no rule matched", no change
   - after a tool result it answers with a short text ("FakeProvider: done") so the loop ends.
+- Implementation (T21a): `parse_text_fallback(text) -> list[ToolCall]` (ids `fallback-<n>`, never raises) and
+  `with_text_fallback(response)` for the chat loop; the provider itself does not apply it. Tool-call arguments that are
+  not a JSON object become `{"_invalid_arguments": "<raw>"}` so the tool can report the error to the model. Any SDK or
+  network failure raises `LLMError` (readable message, no secrets). `OpenAICompatibleProvider.from_settings(settings)`
+  uses `llm_base_url`, `llm_api_key`, `llm_model_fast`; `chat(..., model=...)` overrides the model (e.g. the code model);
+  `temperature=0`, `tool_choice="auto"` when tools are given, SDK `max_retries=1`, timeout 120 s.
 - Messages use OpenAI chat format; tool results are appended as `{"role": "tool", "tool_call_id": ..., "content": <json string>}`.
 
 ## Chat loop (`aibex/llm/chat.py`)
