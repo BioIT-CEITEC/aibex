@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -225,6 +226,62 @@ class OpenAICompatibleProvider:
         except Exception as exc:  # any SDK/network error becomes a readable LLMError
             raise LLMError(f"LLM request failed ({type(exc).__name__}): {_short(exc)}") from exc
         return response_from_completion(completion)
+
+    def chat_text(
+        self,
+        messages: list[dict],
+        model: str | None = None,
+        *,
+        max_seconds: float = 150.0,
+        idle_seconds: float = 60.0,
+        extra_body: dict | None = None,
+    ) -> str:
+        """Text-only answer, streamed (T42, widget code). No tools, no retry.
+
+        A non-streamed request must finish the whole answer within the read timeout, which a long code answer on the
+        shared service often does not. Streamed, only `idle_seconds` without a new chunk (incl. the first) or more than
+        `max_seconds` in total ends the call with an `LLMError`.
+        """
+        start = time.monotonic()
+        parts: list[str] = []
+        reasoning = n_chunks = 0
+        try:
+            client = self._client.with_options(timeout=idle_seconds, max_retries=0)
+            stream = client.chat.completions.create(
+                model=model or self.model,
+                messages=messages,
+                temperature=self.temperature,
+                stream=True,
+                **({"extra_body": extra_body} if extra_body else {}),
+            )
+            try:
+                for chunk in stream:
+                    n_chunks += 1
+                    for choice in _get(chunk, "choices") or []:
+                        delta = _get(choice, "delta")
+                        if delta is None:
+                            continue
+                        text = _get(delta, "content")
+                        if text:
+                            parts.append(str(text))
+                        # reasoning models (vLLM / OpenAI-compatible) stream their thinking separately
+                        think = _get(delta, "reasoning_content") or _get(delta, "reasoning")
+                        if think:
+                            reasoning += len(str(think))
+                    if time.monotonic() - start > max_seconds:
+                        raise LLMError(
+                            f"LLM answer took longer than {max_seconds:.0f} s ({len(''.join(parts))} answer chars, "
+                            f"{reasoning} reasoning chars, {n_chunks} chunks so far)"
+                        )
+            finally:
+                close = getattr(stream, "close", None)
+                if callable(close):
+                    close()
+        except LLMError:
+            raise
+        except Exception as exc:  # any SDK/network error becomes a readable LLMError
+            raise LLMError(f"LLM request failed ({type(exc).__name__}): {_short(exc)}") from exc
+        return "".join(parts)
 
 
 def provider_from_settings(settings: Settings) -> LLMProvider:

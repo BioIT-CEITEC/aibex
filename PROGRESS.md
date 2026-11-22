@@ -71,6 +71,26 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T42 · **live widget works; still `[~]` only for the visual check** · Found the cause of the
+  time-outs: it was not a slow service. Both `coder` and `agentic` are reasoning models. On the widget prompt they
+  streamed >30 000 reasoning chars (3 400 chunks in 150 s) and **0 answer chars**. A non-streamed call hits the read
+  time-out before any code. Fix: new `OpenAICompatibleProvider.chat_text` (streamed text-only answer, no retry,
+  60 s idle / total limit, counts answer and reasoning chars for the error) with an `extra_body`. The widget code
+  writer uses it with `CODE_EXTRA_BODY = {reasoning_effort: "low", chat_template_kwargs: {enable_thinking: false}}`
+  (limits: code model 150 s, chat-model fallback 90 s). The service is a LiteLLM proxy. Both keys were accepted by
+  both aliases (small probes). On the real ADAR2 widget prompt, `coder` answered in 16 s / 12 s with one hint each.
+  **Live run 3/3: widget `gene-editing-track` added at version 1 after 68.7 s in total** (was 356 s and no widget).
+  It has 4 `query_data` calls, then `create_widget` (coder): stem plot of Δ along `position`, hover with WT/ADAR
+  levels, inputs `sites` + `gene` with `$selected`. I checked the test's remaining assertions offline: the top gene
+  has 44 rows in `sites`. The pass/fail line was cut from my output, and no live runs were left to repeat it.
+  Small oddity: the chat reply said the panel was "already in place … refreshed". The live test now saves the
+  generated widget to `logs/widgets/live-widget-editing-adar2.json` (gitignored), so it can be rendered without
+  another LLM call. Run 1 (streaming, no hints) and run 2 (with reasoning counter) were the diagnosis. **Remaining:**
+  one more `-k widget_editing` live run to save the widget JSON, then load it into an ADAR2 session (`/patch`), select
+  Gla and take a screenshot (M4). Q12 is mostly answered by this (coder, about 70 s for the turn); Vojta may still
+  want a shorter limit. Tests: +5 in `tests/test_widget_code.py` (streaming join, total deadline, error mapping,
+  writer prefers streaming with hints + fallback). docs/api.md T42 note updated. Checks: `make test` 457 pass + ruff
+  clean; `make accept` (non-live, phases 1–4) 66/66 pass. No frontend change. No new dependencies.
 - 2026-11-22 · T42 · **still partial `[~]`** · Added the fix proposed last time: when no model could write the widget
   code (time-out/network: `WidgetCodeError.unreachable`), `create_widget` returns `ToolOutcome.stop` and the chat loop
   ends at once with an `error` event ("The widget could not be written: …; nothing was changed") instead of letting

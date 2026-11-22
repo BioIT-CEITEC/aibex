@@ -1,5 +1,6 @@
 """Phase 4 – Level 2 widgets created by the LLM. Criteria A4.* in docs/acceptance.md."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -110,6 +111,10 @@ def test_live_widget_editing_sites_adar2():
           f"\n[live] reply={(body.get('reply') or '')[:300]!r}")
     for w in widgets:
         print(f"[live] widget {w['id']} inputs={w.get('inputs')}\n{w.get('code')}")
+        # keep the generated widget for a visual check without another LLM call (logs/ is gitignored)
+        out = Path(__file__).resolve().parents[3] / "logs" / "widgets"
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "live-widget-editing-adar2.json").write_text(json.dumps(w, indent=2))
     assert len(body["spec"]["panels"]) == n_before + 1 and len(widgets) == 1, f"events={steps}"
     w = widgets[0]
     assert "export default" in w["code"]

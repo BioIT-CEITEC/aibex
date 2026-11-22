@@ -165,6 +165,103 @@ def test_with_timeout_copies_provider_with_bounded_client():
     assert c.kw == {"timeout": 90, "max_retries": 0} and p._client == "bounded-client" and p.model == "agentic"
 
 
+class StreamClient:
+    """Fake OpenAI client: `create(stream=True)` yields chunks with `choices[0].delta.content`."""
+
+    def __init__(self, pieces=(), exc=None, on_chunk=None):
+        self.pieces, self.exc, self.on_chunk = list(pieces), exc, on_chunk
+        self.options, self.kwargs, self.closed = None, None, False
+        self.chat = type("Chat", (), {"completions": self})()
+
+    def with_options(self, **kw):
+        self.options = kw
+        return self
+
+    def create(self, **kw):
+        self.kwargs = kw
+        if self.exc:
+            raise self.exc
+        return self
+
+    def __iter__(self):
+        for p in self.pieces:
+            if self.on_chunk:
+                self.on_chunk()
+            yield {"choices": [{"delta": {"content": p}}]}
+        yield {"choices": [{"delta": {}}]}  # final chunk without content
+        yield {"choices": []}  # usage-only chunk
+
+    def close(self):
+        self.closed = True
+
+
+def test_chat_text_streams_and_joins_content():
+    from aibex.llm.provider import OpenAICompatibleProvider
+
+    c = StreamClient(["```tsx\n", CODE[:20], CODE[20:], "```"])
+    text = OpenAICompatibleProvider("http://x", "k", "agentic", client=c).chat_text(
+        [{"role": "user", "content": "hi"}], model="coder", max_seconds=100, idle_seconds=30
+    )
+    assert extract_code(text) == CODE
+    assert c.kwargs["stream"] is True and c.kwargs["model"] == "coder" and "tools" not in c.kwargs
+    assert "extra_body" not in c.kwargs
+    assert c.options == {"timeout": 30, "max_retries": 0} and c.closed
+    OpenAICompatibleProvider("http://x", "k", "m", client=c).chat_text([], extra_body={"reasoning_effort": "low"})
+    assert c.kwargs["extra_body"] == {"reasoning_effort": "low"}
+
+
+def test_chat_text_total_deadline(monkeypatch):
+    from aibex.llm import provider as prov
+
+    clock = iter(range(0, 1000, 60))
+    monkeypatch.setattr(prov.time, "monotonic", lambda: next(clock))
+    c = StreamClient(["a", "b", "c", "d"])
+    with pytest.raises(LLMError, match="longer than 100 s"):
+        prov.OpenAICompatibleProvider("http://x", "k", "m", client=c).chat_text([], max_seconds=100)
+    assert c.closed
+
+
+def test_chat_text_client_error_is_llm_error():
+    from aibex.llm.provider import OpenAICompatibleProvider
+
+    c = StreamClient(exc=TimeoutError("read timed out"))
+    with pytest.raises(LLMError, match="TimeoutError"):
+        OpenAICompatibleProvider("http://x", "k", "m", client=c).chat_text([])
+
+
+class StreamingProvider:
+    """Has chat_text (like the real provider): coder fails, agentic answers; chat must not be used."""
+
+    def __init__(self, coder_ok=False):
+        self.coder_ok, self.calls = coder_ok, []
+
+    def chat(self, messages, tools, model=None):
+        raise AssertionError("chat() must not be used when chat_text exists")
+
+    def chat_text(self, messages, model=None, *, max_seconds, idle_seconds, extra_body=None):
+        from aibex.llm.widget_code import CODE_EXTRA_BODY
+
+        assert extra_body == CODE_EXTRA_BODY
+        self.calls.append((model, max_seconds, idle_seconds))
+        if model == "coder" and not self.coder_ok:
+            raise LLMError("LLM answer took longer than 150 s")
+        return f"```tsx\n{CODE}```"
+
+
+def test_code_writer_prefers_streaming(bundle):
+    from aibex.llm.widget_code import CODE_FALLBACK_MAX, CODE_STREAM_IDLE, CODE_STREAM_MAX
+
+    p = StreamingProvider(coder_ok=True)
+    w = make_code_writer(bundle, p, "coder", fallback_model="agentic")
+    assert w(DESC, INPUTS, None, None) == CODE and not w.used_fallback
+    assert p.calls == [("coder", CODE_STREAM_MAX, CODE_STREAM_IDLE)]
+
+    p = StreamingProvider()
+    w = make_code_writer(bundle, p, "coder", fallback_model="agentic")
+    assert w(DESC, INPUTS, None, None) == CODE and w.used_fallback
+    assert [c[:2] for c in p.calls] == [("coder", CODE_STREAM_MAX), ("agentic", CODE_FALLBACK_MAX)]
+
+
 # --- create_widget with description ---------------------------------------------------------------------------------
 def test_description_uses_code_writer(session):
     w = Writer(CODE)

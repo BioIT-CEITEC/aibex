@@ -89,8 +89,12 @@ class LLMProvider(Protocol):
   `export default` (else the text). Code rejected by the validation (only `.code` errors) is sent back to the code
   model once with the errors. Result adds `"code_by": "code model"`. The description is not stored in the spec. An
   explicit `code` wins (FakeProvider still passes code). `chat_events`/`run_chat` take `code_model`; `/chat` passes
-  `settings.llm_model_code`. The code-model call is bounded: 90 s, no retry (`OpenAICompatibleProvider.with_timeout`);
-  when it fails or times out, the chat model writes the code from the same messages and the result says
+  `settings.llm_model_code`. The code-model call is **streamed** (`OpenAICompatibleProvider.chat_text`, no tools, no
+  retry) with low-reasoning hints in the request body (`reasoning_effort: "low"`,
+  `chat_template_kwargs.enable_thinking: false`, `CODE_EXTRA_BODY`): without them the e-INFRA reasoning models streamed
+  >30 000 reasoning chars and no code within 150 s. Limits: 60 s without a chunk, 150 s in total (code model) / 90 s
+  (fallback). Providers without `chat_text` get one bounded `chat` call (90 s, no retry, `with_timeout`). When the code
+  model fails or times out, the chat model writes the code from the same messages and the result says
   `"code_by": "chat model (the code model failed)"`. Only when both fail (time-out/network) is the `create_widget`
   rejected, and then the chat loop stops at once with an `error` event ("The widget could not be written: …"; nothing
   changed) instead of letting the chat model retry, which would double the wait. A code answer without a component

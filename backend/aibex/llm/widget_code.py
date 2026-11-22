@@ -20,7 +20,15 @@ from aibex.query import QueryError, check_readonly
 from aibex.widgets import input_params
 
 MAX_DESCRIPTION = 4000
-CODE_MODEL_TIMEOUT = 90.0  # seconds, one attempt; then the chat model writes the code
+CODE_MODEL_TIMEOUT = 90.0  # seconds, one non-streamed attempt (providers without chat_text)
+CODE_STREAM_IDLE = 60.0  # streamed: max seconds without a new chunk (incl. time to the first token)
+CODE_STREAM_MAX = 150.0  # streamed: max seconds in total for the code model
+CODE_FALLBACK_MAX = 90.0  # streamed: max seconds in total for the chat-model fallback
+# Reasoning models on the e-INFRA LiteLLM proxy otherwise think for minutes (>30 000 reasoning chars, no answer
+# after 150 s) on the widget prompt; with these hints `coder` answered in 12–16 s (T42 probe, 2026-11-22). Both keys
+# were accepted by `coder` and `agentic`: `reasoning_effort` (OpenAI / gpt-oss style) and `enable_thinking` (Qwen-style
+# chat templates); a model that does not know one ignores it.
+CODE_EXTRA_BODY: dict = {"reasoning_effort": "low", "chat_template_kwargs": {"enable_thinking": False}}
 
 # (description, inputs, previous_code, errors) -> code; raises WidgetCodeError
 CodeWriter = Callable[[str, list[dict], str | None, list[str] | None], str]
@@ -117,31 +125,41 @@ def build_messages(
 def make_code_writer(
     bundle: Bundle, provider: Any, model: str | None, fallback_model: str | None = None
 ) -> CodeWriter:
-    """A `CodeWriter` that calls `provider.chat` (no tools) with the code model.
+    """A `CodeWriter` that asks the code model (no tools) for the widget code.
 
-    The code model call is bounded (`CODE_MODEL_TIMEOUT`, no retry, when the provider supports `with_timeout`); if it
-    fails or times out, the chat model (`fallback_model`, None = provider default) writes the code instead, so a slow
-    code model cannot stall a live demo.
+    When the provider has `chat_text` (the real one), the answer is **streamed** with low-reasoning hints
+    (`CODE_EXTRA_BODY`): a slow but steady answer is not cut
+    by a read timeout, only `CODE_STREAM_IDLE` s without a chunk or `CODE_STREAM_MAX` s in total end it. Otherwise
+    `provider.chat` is used, bounded (`CODE_MODEL_TIMEOUT`, no retry, when the provider supports `with_timeout`). If the
+    code model fails, the chat model (`fallback_model`, None = provider default) writes the code the same way (fallback
+    total `CODE_FALLBACK_MAX` s), so a slow code model cannot stall a live demo.
     """
     bounded = provider.with_timeout(CODE_MODEL_TIMEOUT) if hasattr(provider, "with_timeout") else provider
+
+    def ask(messages: list[dict], m: str | None, max_seconds: float) -> str:
+        if hasattr(provider, "chat_text"):
+            return provider.chat_text(
+                messages, model=m, max_seconds=max_seconds, idle_seconds=CODE_STREAM_IDLE, extra_body=CODE_EXTRA_BODY
+            )
+        return bounded.chat(messages, [], model=m).text
 
     def write(description: str, inputs: list[dict], previous_code: str | None, errors: list[str] | None) -> str:
         messages = build_messages(bundle, description, inputs, previous_code, errors)
         write.used_fallback = False  # type: ignore[attr-defined]
         try:
-            response = bounded.chat(messages, [], model=model)
+            text = ask(messages, model, CODE_STREAM_MAX)
         except Exception as exc:  # noqa: BLE001 – LLMError or a broken provider
             first = f"the code model could not be reached: {str(exc)[:200]}"
             if model is None or model == fallback_model:
                 raise WidgetCodeError(first, unreachable=True) from None
             try:
-                response = provider.chat(messages, [], model=fallback_model)
+                text = ask(messages, fallback_model, CODE_FALLBACK_MAX)
             except Exception as exc2:  # noqa: BLE001
                 raise WidgetCodeError(
                     f"{first}; the chat model also failed: {str(exc2)[:200]}", unreachable=True
                 ) from None
             write.used_fallback = True  # type: ignore[attr-defined]
-        return extract_code(response.text)
+        return extract_code(text)
 
     write.used_fallback = False  # type: ignore[attr-defined]
     return write
