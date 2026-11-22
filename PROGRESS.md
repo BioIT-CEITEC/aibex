@@ -40,7 +40,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
 - [x] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
 - [x] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
-- [ ] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
+- [x] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
 - [ ] T25 Live check with the real model (`make accept-live`, ≤3 runs, A2.5); tune the system prompt; results + latency in the Log (after: T23)
 - [ ] T26 M2: demo prompts 1–3 and 6 with the real model on the ADAR2 bundle; latency in the Log – Vojta (after: T24b, T25, T32)
 - [ ] T27 Morning review: merge Phases 1–2 to `main`, push, `make restart` – Vojta
@@ -70,6 +70,16 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T24b · done · `GET /sessions/{sid}` now also returns `can_undo`/`can_redo` (steps available; additive,
+  docs/api.md + unit test `test_session_state_undo_redo_counts`). Store keeps `canUndo`/`canRedo` (set at once after a
+  user patch/undo/redo, confirmed by the history refresh; reset on a new session). New `components/History.tsx`:
+  `UndoRedoButtons` in the header next to `spec-version` (`undo-button`/`redo-button`, disabled while nothing to
+  undo/redo, a change is in flight or a chat turn streams; Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z / Ctrl+Y outside text
+  fields) and `HistoryList` (collapsible "History (n)" section above the chat, newest first, `history-item` with
+  `data-version`, source badge init/you/AI, current version highlighted with `data-current`). Checks: `make test` 396
+  pass + typecheck/lint clean; phase-1 acceptance 34 pass; phase-2 16/16 pass; `make e2e` 16 pass incl. E2.1–E2.4,
+  only E4.1 (Phase 4) fails as expected. Screenshot `logs/screens/E2.1-label.png` (written by E2.1). No new
+  dependencies.
 - 2026-11-22 · T24a · done · `ChatPanel` (right sidebar, sticky): textarea `chat-input` (Enter sends), `chat-send`,
   user bubbles `chat-user-message`, assistant bubbles `chat-message` with tool steps (running → ✓/✕), applied
   changes (`→ version n: summary`), reply text, errors. `chatStream` in `lib/api.ts` parses the POST SSE stream with

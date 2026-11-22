@@ -117,7 +117,7 @@ class LLMProvider(Protocol):
 | GET | `/bundles/{id}/views` | – | `[{name, title}]` saved views (Phase 5) |
 | POST | `/bundles/{id}/views` | `{name, spec}` | `{name}`; spec validated (422), name kebab-case (Phase 5) |
 | POST | `/sessions` | `{bundle}` | `{session_id, spec, version: 0}` (404 unknown bundle) |
-| GET | `/sessions/{sid}` | – | `{session_id, spec, version, history: [{version, summary, source}]}` (`source`: `init`/`user`/`llm`) |
+| GET | `/sessions/{sid}` | – | `{session_id, spec, version, history: [{version, summary, source}], can_undo, can_redo}` (`source`: `init`/`user`/`llm`; `can_undo`/`can_redo` = steps available) |
 | POST | `/sessions/{sid}/patch` | `{patch, summary?}` | `{spec, version}`; invalid → **422** `{detail: {errors: [...]}}`, version unchanged |
 | POST | `/sessions/{sid}/undo` | `{steps?: 1}` | `{spec, version}`; nothing to undo → **409**, version unchanged |
 | POST | `/sessions/{sid}/redo` | `{steps?: 1}` | `{spec, version}`; nothing to redo → **409**, version unchanged |
@@ -240,6 +240,10 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   `error` event; a `spec` event replaces the store spec at once and refreshes the history. User bubbles are
   `chat-user-message`. A request failure (unreachable, 422) puts the text back into the input. The transcript is view
   state and is cleared when a new session starts.
+- History (T24b): header shows `undo-button` / `redo-button` (disabled from `can_undo`/`can_redo` of
+  `GET /sessions/{sid}`, refreshed after every change; Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z / Ctrl+Y outside text fields)
+  next to `spec-version`. The sidebar "History" section lists every version newest first (`history-item`, with
+  `data-version`, source badge `init`/`you`/`AI` and summary); the current one is marked `data-current="true"`.
 - Toggling a filter checkbox or dragging/resizing a panel sends a patch with `source: "user"` (a new, undoable version).
   Drag/resize (title bar / bottom-right corner) patches only the changed `x/y/w/h` of every moved item, each guarded by
   a `test` on `/layout/<k>/i`; summary `move|resize panel <id> (+n shifted)`.

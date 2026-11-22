@@ -33,6 +33,9 @@ interface AppState {
   spec: Spec | null;
   version: number | null;
   history: HistoryEntry[];
+  /** Steps that can be undone / redone (from `GET /sessions/{sid}`; drive the undo/redo buttons). */
+  canUndo: number;
+  canRedo: number;
   /** True while a session is being created (bootstrap or bundle switch). */
   loading: boolean;
   /** True while a patch/undo/redo request is in flight. */
@@ -87,7 +90,7 @@ export const useAppStore = create<AppState>()((set, get) => {
     const seq = ++sessionSeq;
     chatAbort?.abort();
     chatAbort = null;
-    set({ loading: true, error: null, bundleId, selection: [], chat: [], chatBusy: false });
+    set({ loading: true, error: null, bundleId, selection: [], chat: [], chatBusy: false, canUndo: 0, canRedo: 0 });
     try {
       const created = await api.createSession(bundleId);
       if (seq !== sessionSeq) return;
@@ -108,6 +111,8 @@ export const useAppStore = create<AppState>()((set, get) => {
         spec: null,
         version: null,
         history: [],
+        canUndo: 0,
+        canRedo: 0,
         error: { message: `Could not open bundle "${bundleId}": ${errorMessage(e)}`, retry: () => void startSession(bundleId) },
       });
     }
@@ -119,20 +124,34 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (get().sessionId !== sid) return;
       const current = get().version ?? -1;
       // never let a slow refresh roll the spec back past a newer version
-      set(s.version >= current ? { history: s.history, spec: s.spec, version: s.version } : { history: s.history });
+      if (s.version >= current) {
+        set({ history: s.history, spec: s.spec, version: s.version, canUndo: s.can_undo, canRedo: s.can_redo });
+      } else set({ history: s.history });
     } catch {
       // history is informative; a failed refresh keeps the last known list
     }
   };
 
-  const change = async (label: string, run: (sid: string) => Promise<SpecVersion>): Promise<boolean> => {
+  // `kind` gives the undo/redo counts right away (one step); the history refresh then confirms them.
+  const change = async (
+    label: string,
+    kind: 'patch' | 'undo' | 'redo',
+    run: (sid: string) => Promise<SpecVersion>,
+  ): Promise<boolean> => {
     const sid = get().sessionId;
     if (!sid) return false;
     set({ busy: true });
     try {
       const res = await run(sid);
       if (get().sessionId !== sid) return false;
-      set({ spec: res.spec, version: res.version, busy: false, error: null });
+      const { canUndo, canRedo } = get();
+      const counts =
+        kind === 'patch'
+          ? { canUndo: canUndo + 1, canRedo: 0 }
+          : kind === 'undo'
+            ? { canUndo: Math.max(0, canUndo - 1), canRedo: canRedo + 1 }
+            : { canUndo: canUndo + 1, canRedo: Math.max(0, canRedo - 1) };
+      set({ spec: res.spec, version: res.version, busy: false, error: null, ...counts });
       void refreshHistory(sid);
       return true;
     } catch (e) {
@@ -148,6 +167,8 @@ export const useAppStore = create<AppState>()((set, get) => {
     spec: null,
     version: null,
     history: [],
+    canUndo: 0,
+    canRedo: 0,
     loading: true,
     busy: false,
     error: null,
@@ -262,9 +283,15 @@ export const useAppStore = create<AppState>()((set, get) => {
       await startSession(bundleId);
     },
 
-    applyPatch: (patch, summary) => change('Change', (sid) => api.patch(sid, patch, summary)),
-    undo: async () => void (await change('Undo', (sid) => api.undo(sid))),
-    redo: async () => void (await change('Redo', (sid) => api.redo(sid))),
+    applyPatch: (patch, summary) => change('Change', 'patch', (sid) => api.patch(sid, patch, summary)),
+    undo: async () => {
+      if (get().busy || get().canUndo < 1) return;
+      await change('Undo', 'undo', (sid) => api.undo(sid));
+    },
+    redo: async () => {
+      if (get().busy || get().canRedo < 1) return;
+      await change('Redo', 'redo', (sid) => api.redo(sid));
+    },
 
     receiveSpec: async ({ spec, version }) => {
       const sid = get().sessionId;

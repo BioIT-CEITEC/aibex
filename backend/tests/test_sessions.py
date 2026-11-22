@@ -223,5 +223,18 @@ def test_undo_redo_endpoints(client, sid):
     assert client.post(f"/api/sessions/{sid}/redo", json={"steps": 1}).status_code == 409
 
 
+def test_session_state_undo_redo_counts(client, sid):
+    s = client.get(f"/api/sessions/{sid}").json()
+    assert (s["can_undo"], s["can_redo"]) == (0, 0)
+    client.post(f"/api/sessions/{sid}/patch", json={"patch": _title(0, "A")})
+    client.post(f"/api/sessions/{sid}/patch", json={"patch": _title(0, "B")})
+    client.post(f"/api/sessions/{sid}/undo")
+    s = client.get(f"/api/sessions/{sid}").json()
+    assert (s["can_undo"], s["can_redo"]) == (1, 1)
+    client.post(f"/api/sessions/{sid}/patch", json={"patch": _title(0, "C")})  # drops the redo part
+    s = client.get(f"/api/sessions/{sid}").json()
+    assert (s["can_undo"], s["can_redo"]) == (2, 0)
+
+
 def test_steps_must_be_positive(client, sid):
     assert client.post(f"/api/sessions/{sid}/undo", json={"steps": 0}).status_code == 422

@@ -4,11 +4,13 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { Dashboard } from '@/components/Dashboard';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FiltersBar } from '@/components/FiltersBar';
+import { UndoRedoButtons } from '@/components/History';
 import { SelectionBar } from '@/components/SelectionBar';
 import { useAppStore } from '@/store';
 
 // App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
-// The main area is the panel grid (T17a) with the chat panel (T24a) on the right; history/undo (T24b) come next.
+// The main area is the panel grid (T17a) with the chat panel (T24a) on the right; undo/redo in the header and the
+// version history above the chat (T24b).
 export default function App() {
   const bootstrap = useAppStore((s) => s.bootstrap);
   const spec = useAppStore((s) => s.spec);
@@ -27,6 +29,7 @@ export default function App() {
         <SelectionBar selectionKey={spec?.selection && spec.selection.linked !== false ? spec.selection.key : null} />
         <div className="ml-auto flex shrink-0 items-center gap-4">
           <BundleSelect />
+          <UndoRedoButtons />
           <span className="text-sm text-muted-foreground">
             version <span data-testid="spec-version">{version ?? '–'}</span>
           </span>

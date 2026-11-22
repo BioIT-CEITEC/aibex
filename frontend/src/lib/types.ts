@@ -154,6 +154,9 @@ export interface SessionCreated {
 
 export interface SessionState extends SessionCreated {
   history: HistoryEntry[];
+  /** Steps that can be undone / redone from the current version. */
+  can_undo: number;
+  can_redo: number;
 }
 
 export interface SpecVersion {

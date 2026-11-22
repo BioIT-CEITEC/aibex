@@ -118,6 +118,8 @@ class Session:
                 "spec": self.spec,
                 "version": self.version,
                 "history": [dict(h) for h in self.history],
+                "can_undo": self.can_undo,
+                "can_redo": self.can_redo,
             }
 
 

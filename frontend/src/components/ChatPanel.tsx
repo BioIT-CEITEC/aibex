@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { HistoryList } from '@/components/History';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAppStore, type ChatMessage } from '@/store';
@@ -84,6 +85,7 @@ export function ChatPanel() {
 
   return (
     <aside className="flex h-[calc(100vh-3.5rem)] w-96 shrink-0 flex-col border-l bg-background sticky top-0">
+      <HistoryList />
       <div className="border-b px-3 py-2 text-sm font-medium">Assistant</div>
       <div ref={listRef} className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
         {chat.length === 0 && (
