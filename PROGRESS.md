@@ -36,7 +36,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 ## Phase 2 – prompt editing
 - [x] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
 - [x] T21b `FakeProvider` rules per docs/api.md + unit tests; provider selection in `create_app` (after: T21a)
-- [ ] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
+- [x] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
 - [ ] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
 - [ ] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
 - [ ] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
@@ -70,6 +70,16 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T22a · done · `aibex/llm/tools.py`: `TOOL_SCHEMAS` (OpenAI function defs for describe_bundle,
+  query_data, update_view, undo_view; create_widget comes in T40b and returns an error until then), plain functions
+  and `run_tool(session, name, args) -> ToolOutcome` (result dict, `changed`, `failed_change`, `summary`, `content()`
+  JSON) for the T22b loop. Never raises (unknown tool, `_invalid_arguments`, missing patch, unexpected exceptions →
+  `{"ok": false, "errors"}`); only rejected update_view/create_widget set `failed_change`. describe_bundle = schema +
+  per-column stats (n_null; numeric min/max/mean; string n_distinct + ≤10 most frequent examples), `matrix` flag,
+  samples summary; no rows (toy: ≤10 of 300 site ids). query_data hard cap 200 rows (SQL LIMIT cannot raise it) +
+  `note` when truncated. update_view/undo_view record `source: "llm"`; double-encoded patch / single op tolerated.
+  docs/api.md implementation note. Tests `tests/test_tools.py` (27). Checks: `make test` 370 pass + lint/typecheck
+  clean; phase-1 acceptance 34 pass; phase-2 6 pass, same 10 `/chat` failures (T22b). No new dependencies. No UI.
 - 2026-11-22 · T21b · done · `aibex/llm/fake.py` `FakeProvider` with the docs/api.md rules (label / padj below /
   undo [n] / add widget / no rule matched / "FakeProvider: done" after a tool result). The `LLMProvider` protocol only
   passes `messages`, so the fake reads the current spec + bundle schema from JSON in system/user messages (fenced or

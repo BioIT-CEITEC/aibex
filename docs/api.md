@@ -73,6 +73,17 @@ class LLMProvider(Protocol):
 - Each applied `update_view` / `create_widget` / `undo_view` is one new version with `source: "llm"` (decided, Q6).
 - Privacy rule: no tool result may contain more than **200 rows**; `describe_bundle` returns schema + summary stats only.
   The provider must never receive whole tables.
+- Implementation (T22a, `aibex/llm/tools.py`): `TOOL_SCHEMAS` (OpenAI function definitions; `create_widget` is added in
+  T40b, until then it returns an error), plain functions `describe_bundle(bundle)`, `query_data(bundle, sql)`,
+  `update_view(session, patch, summary)`, `undo_view(session, steps)` and the dispatcher
+  `run_tool(session, name, arguments) -> ToolOutcome(name, result, changed, failed_change, summary)`; `content()` is
+  the JSON string for the tool message. Tools never raise: errors are `{"ok": false, "errors": [...]}`.
+  `failed_change` is set only for rejected `update_view`/`create_widget` (incl. invalid/missing arguments) – that is
+  what the "2 failures in a row" rule counts; failed `query_data`/`undo_view` do not count. `describe_bundle` adds
+  `columns.<col>.stats` (`n_null`; int/float `min`/`max`/`mean`; date `min`/`max`; bool `n_true`; string `n_distinct`
+  + ≤10 most frequent `examples`, cut at 80 chars), `matrix: true` on genes × samples tables, and `samples`
+  (`n`, ≤10 distinct values per samples.tsv column). `query_data` adds `note` when truncated. `update_view` accepts a
+  double-encoded patch string or a single op object; an empty summary falls back to the op list.
 
 ## REST endpoints (all JSON, prefix `/api`)
 | method | path | body | response |
