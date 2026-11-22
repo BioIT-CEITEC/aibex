@@ -5,6 +5,7 @@ import { Dashboard } from '@/components/Dashboard';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FiltersBar } from '@/components/FiltersBar';
 import { UndoRedoButtons } from '@/components/History';
+import { SavedViews } from '@/components/SavedViews';
 import { SelectionBar } from '@/components/SelectionBar';
 import { Spinner } from '@/components/ui/spinner';
 import { useAppStore } from '@/store';
@@ -30,6 +31,7 @@ export default function App() {
         <SelectionBar selectionKey={spec?.selection && spec.selection.linked !== false ? spec.selection.key : null} />
         <div className="ml-auto flex shrink-0 items-center gap-4">
           <BundleSelect />
+          <SavedViews />
           <UndoRedoButtons />
           <span className="text-sm text-muted-foreground">
             version <span data-testid="spec-version">{version ?? '–'}</span>

@@ -24,6 +24,7 @@ from aibex.query import QueryError, run_query
 from aibex.sessions import NothingToUndo, PatchError, Session, SessionNotFound, SessionStore
 from aibex.spec import parse_spec
 from aibex.validate import validate_spec
+from aibex.views import ViewError, ViewNotFound, list_views, load_view, save_view
 
 
 class QueryRequest(BaseModel):
@@ -51,6 +52,16 @@ class ChatRequest(BaseModel):
 
 class StepsRequest(BaseModel):
     steps: int = Field(default=1, ge=1, le=1000)
+
+
+class SaveViewRequest(BaseModel):
+    name: Any
+    spec: Any
+    title: str | None = None
+
+
+class LoadViewRequest(BaseModel):
+    name: Any
 
 
 def get_settings(request: Request) -> Settings:
@@ -84,6 +95,22 @@ def _api_router() -> APIRouter:
     def bundle_default_view(bundle_id: str, request: Request) -> dict:
         """The bundle's `default_view` file if valid, else a generated spec (always valid)."""
         return default_view(get_bundle(request, bundle_id))
+
+    @router.get("/bundles/{bundle_id}/views")
+    def bundle_views(bundle_id: str, request: Request) -> list[dict]:
+        """Saved views of the bundle, `[{name, title}]` sorted by name."""
+        return list_views(get_bundle(request, bundle_id))
+
+    @router.post("/bundles/{bundle_id}/views")
+    def save_bundle_view(bundle_id: str, body: SaveViewRequest, request: Request) -> dict:
+        """Validate and store a spec as `views/<name>.json`; 422 `{detail: {errors}}` for a bad name or spec."""
+        bundle = get_bundle(request, bundle_id)
+        try:
+            return {"name": save_view(bundle, body.name, body.spec, body.title)}
+        except ViewError as exc:
+            raise HTTPException(status_code=422, detail={"errors": exc.errors}) from None
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"cannot write the view: {exc.strerror or exc}") from None
 
     @router.post("/bundles/{bundle_id}/query")
     def bundle_query(bundle_id: str, body: QueryRequest, request: Request) -> dict:
@@ -139,6 +166,21 @@ def _api_router() -> APIRouter:
     @router.post("/sessions/{sid}/redo")
     def redo_session(sid: str, request: Request, body: StepsRequest | None = None) -> dict:
         return _move(request, sid, "redo", (body or StepsRequest()).steps)
+
+    @router.post("/sessions/{sid}/load-view")
+    def load_session_view(sid: str, body: LoadViewRequest, request: Request) -> dict:
+        """Load a saved view of the session's bundle as a new, undoable version (source `user`).
+        404 unknown view; 422 when the name is invalid or the stored spec no longer validates (version unchanged)."""
+        s = get_session(request, sid)
+        try:
+            spec = load_view(s.bundle, body.name)
+            with s.lock:
+                new = s.replace_spec(spec, f"load view {body.name}", source="user")
+                return {"spec": new, "version": s.version}
+        except ViewNotFound:
+            raise HTTPException(status_code=404, detail=f"unknown view {body.name!r}") from None
+        except (ViewError, PatchError) as exc:
+            raise HTTPException(status_code=422, detail={"errors": exc.errors}) from None
 
     @router.post("/sessions/{sid}/chat")
     def chat_session(sid: str, body: ChatRequest, request: Request, stream: bool = True) -> Any:

@@ -6,6 +6,7 @@ import type {
   Health,
   PanelData,
   PatchOp,
+  SavedView,
   SessionCreated,
   SessionState,
   Spec,
@@ -82,6 +83,10 @@ export const api = {
     request<SpecVersion>('POST', `/sessions/${enc(sid)}/patch`, summary ? { patch, summary } : { patch }),
   undo: (sid: string, steps = 1) => request<SpecVersion>('POST', `/sessions/${enc(sid)}/undo`, { steps }),
   redo: (sid: string, steps = 1) => request<SpecVersion>('POST', `/sessions/${enc(sid)}/redo`, { steps }),
+  views: (bundle: string) => request<SavedView[]>('GET', `/bundles/${enc(bundle)}/views`),
+  saveView: (bundle: string, name: string, spec: Spec, title?: string) =>
+    request<{ name: string }>('POST', `/bundles/${enc(bundle)}/views`, title ? { name, spec, title } : { name, spec }),
+  loadView: (sid: string, name: string) => request<SpecVersion>('POST', `/sessions/${enc(sid)}/load-view`, { name }),
   panelData: (sid: string, panelId: string, selection?: string[]) =>
     request<PanelData>(
       'POST',

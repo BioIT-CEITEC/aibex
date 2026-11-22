@@ -62,7 +62,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Phase 5 – polish
 - [x] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
-- [ ] T51 Saved views per bundle: `/bundles/{id}/views`, `/sessions/{sid}/load-view`, UI save/load; unit tests [P5.2] (after: T15, T24b)
+- [x] T51 Saved views per bundle: `/bundles/{id}/views`, `/sessions/{sid}/load-view`, UI save/load; unit tests [P5.2] (after: T15, T24b)
 - [ ] T52 Demo-script panel with the 6 demo prompts, click to send [P5.3] (after: T24a)
 - [ ] T53 Theme + palette pass (light/dark) [P5.4]; final screenshots of every demo prompt into `logs/screens/` (after: T50, T52)
 - [ ] T54 Production build check: `npm run build`, uvicorn serves `frontend/dist` at `/`, health ok; note any deploy change needed (after: T53)
@@ -71,6 +71,21 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T51 · **done (P5.2)** · New `aibex/views.py`: a saved view is a plain spec in
+  `<bundle>/views/<name>.json` (as in docs/bundle-format.md), written atomically. Endpoints as in docs/api.md:
+  `GET/POST /bundles/{id}/views` and `POST /sessions/{sid}/load-view`. Load-view applies the view as one undoable
+  version ("load view <name>", source `user`). Unknown view gives 404. An invalid name, an invalid spec, or a stored
+  view that no longer validates gives 422 and changes nothing. Additive contract change: optional `title` in the
+  POST body is stored as the spec's title and listed. Saving over the bundle's `default_view` file is refused,
+  because it would change every new session. Note for deploy: saving needs the data volume to be writable (the
+  `aibex-data` PVC is mounted read-write today); a write error gives a readable 500. UI: header has a "Views"
+  select (`view-select`, loads a view) and a "Save view" button with a small form (`view-title-input`; the file name
+  is the kebab-case of the title, with a warning when it replaces a saved view; backend errors are shown in the
+  form). `make_toy_bundle.py` now clears `views/`, so e2e runs do not pile up views. Tip from T42: save the good live
+  ADAR2 widget view once and load it in the demo instead of generating it live. Tests: `tests/test_views.py`
+  (24 tests), `e2e/views.spec.ts` (3). Screenshots: `logs/screens/P5.2-{save-view,loaded-view}.png`, checked.
+  Checks: `make test` 482 pass + ruff/typecheck/lint clean; `make accept` (phases 1–4) 66/66 pass; `make e2e` 31/31
+  pass. No new dependencies.
 - 2026-11-22 · T50 · **done (P5.1)** · Panels: the first load shows a placeholder with a spinner
   (`loading-panel-<id>`). A refetch keeps the old data, dimmed, with "updating…" in the title bar. The frame has
   `data-loading`/`aria-busy`. A failed panel has `error-panel-<id>` and `retry-panel-<id>`. These test ids avoid the

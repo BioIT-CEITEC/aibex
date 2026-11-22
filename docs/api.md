@@ -145,7 +145,7 @@ class LLMProvider(Protocol):
 | POST | `/bundles/{id}/query` | `{sql, limit?}` | `{columns, rows, row_count, truncated}` – read-only single SELECT/WITH, else **400** |
 | GET | `/bundles/{id}/default-view` | – | a valid spec (from `default_view` in bundle.yaml or generated) |
 | GET | `/bundles/{id}/views` | – | `[{name, title}]` saved views (Phase 5) |
-| POST | `/bundles/{id}/views` | `{name, spec}` | `{name}`; spec validated (422), name kebab-case (Phase 5) |
+| POST | `/bundles/{id}/views` | `{name, spec, title?}` | `{name}`; spec validated (422), name kebab-case (Phase 5) |
 | POST | `/sessions` | `{bundle}` | `{session_id, spec, version: 0}` (404 unknown bundle) |
 | GET | `/sessions/{sid}` | – | `{session_id, spec, version, history: [{version, summary, source}], can_undo, can_redo}` (`source`: `init`/`user`/`llm`; `can_undo`/`can_redo` = steps available) |
 | POST | `/sessions/{sid}/patch` | `{patch, summary?}` | `{spec, version}`; invalid → **422** `{detail: {errors: [...]}}`, version unchanged |
@@ -157,6 +157,18 @@ class LLMProvider(Protocol):
 | POST | `/validate-spec` | spec | `{valid: bool, errors: [...]}` |
 
 Unknown session id → **404** everywhere.
+
+### Saved views (T51, `aibex/views.py`)
+- Stored as plain specs in `<bundle>/views/<name>.json` (docs/bundle-format.md), written atomically. Saving under an
+  existing name overwrites it. Name: kebab-case `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, max 64 chars, else **422**.
+- `POST /bundles/{id}/views`: the spec is validated like `/validate-spec` (422 `{detail: {errors}}`); `spec.bundle`
+  must be the bundle id (or missing). Optional `title` (1–200 chars) is stored as the spec's `title`. The file the
+  bundle names as `default_view` cannot be overwritten (422). A write error (read-only data dir) is **500**.
+- `GET /bundles/{id}/views`: `[{name, title}]` sorted by name; `title` = the spec's title (else the name). Files with
+  a non-kebab name or unreadable JSON are skipped.
+- `POST /sessions/{sid}/load-view`: applies the view via `replace_spec` as one version, summary `load view <name>`,
+  source `user` (undoable). Unknown view **404**; invalid name or a stored spec that no longer validates **422**,
+  version unchanged.
 
 ### Query details
 - `rows` is a list of arrays aligned with `columns` (same for panel data and widget inputs).

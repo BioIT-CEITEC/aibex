@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import random
+import shutil
 import sys
 from pathlib import Path
 
@@ -23,6 +24,7 @@ def make_toy_bundle(data_dir: Path, bundle_id: str = "toy") -> Path:
     rnd = random.Random(42)
     out = Path(data_dir) / bundle_id
     (out / "tables").mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(out / "views", ignore_errors=True)  # saved views of earlier e2e runs (T51)
 
     gene_ids = [f"ENSMUSG{i:011d}" for i in range(1, N_GENES + 1)]
     gene_names = [f"Gene_{i:03d}" for i in range(1, N_GENES + 1)]

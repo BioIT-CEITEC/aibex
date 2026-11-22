@@ -3,7 +3,7 @@
 // through the backend (patch/undo/redo) and the store takes the returned spec – it never edits the spec locally.
 import { create } from 'zustand';
 import { api, ApiError, chatStream, errorMessage } from '@/lib/api';
-import type { BundleInfo, ChatEvent, HistoryEntry, PatchOp, Spec, SpecVersion } from '@/lib/types';
+import type { BundleInfo, ChatEvent, HistoryEntry, PatchOp, SavedView, Spec, SpecVersion } from '@/lib/types';
 
 export interface AppError {
   message: string;
@@ -54,6 +54,18 @@ interface AppState {
   chat: ChatMessage[];
   /** True while a chat turn is streaming. */
   chatBusy: boolean;
+  /** Saved views of the current bundle (T51); refreshed when a session starts and after a save. */
+  views: SavedView[];
+
+  /** Reload the saved-view list of the current bundle (a failed load keeps the last list). */
+  refreshViews: () => Promise<void>;
+  /**
+   * Save the current spec as view `name` (kebab-case) with a display `title`. Resolves to null on success, else the
+   * readable error (the caller shows it next to the input; the banner is not used).
+   */
+  saveView: (name: string, title: string) => Promise<string | null>;
+  /** Load a saved view as a new, undoable version; returns false when the backend rejected it. */
+  loadView: (name: string) => Promise<boolean>;
 
   /**
    * Send a chat message (SSE); `spec` events update the dashboard as they arrive. Returns false when the request
@@ -96,7 +108,17 @@ export const useAppStore = create<AppState>()((set, get) => {
     const seq = ++sessionSeq;
     chatAbort?.abort();
     chatAbort = null;
-    set({ loading: true, error: null, bundleId, selection: [], chat: [], chatBusy: false, canUndo: 0, canRedo: 0 });
+    set({
+      loading: true,
+      error: null,
+      bundleId,
+      selection: [],
+      chat: [],
+      chatBusy: false,
+      canUndo: 0,
+      canRedo: 0,
+      views: [],
+    });
     try {
       const created = await api.createSession(bundleId);
       if (seq !== sessionSeq) return;
@@ -109,6 +131,7 @@ export const useAppStore = create<AppState>()((set, get) => {
       });
       setBundleParam(bundleId);
       void refreshHistory(created.session_id);
+      void get().refreshViews();
     } catch (e) {
       if (seq !== sessionSeq) return;
       set({
@@ -192,6 +215,32 @@ export const useAppStore = create<AppState>()((set, get) => {
     selection: [],
     chat: [],
     chatBusy: false,
+    views: [],
+
+    refreshViews: async () => {
+      const bundleId = get().bundleId;
+      if (!bundleId) return;
+      try {
+        const views = await api.views(bundleId);
+        if (get().bundleId === bundleId) set({ views });
+      } catch {
+        // the list is optional; keep the last known one
+      }
+    },
+
+    saveView: async (name, title) => {
+      const { bundleId, spec } = get();
+      if (!bundleId || !spec) return 'No view is open.';
+      try {
+        await api.saveView(bundleId, name, spec, title);
+      } catch (e) {
+        return errorMessage(e);
+      }
+      await get().refreshViews();
+      return null;
+    },
+
+    loadView: (name) => change(`Loading view "${name}"`, 'patch', (sid) => api.loadView(sid, name)),
 
     sendChat: async (message) => {
       const sid = get().sessionId;

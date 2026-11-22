@@ -164,6 +164,12 @@ export interface SpecVersion {
   version: number;
 }
 
+/** One saved view of a bundle (`GET /bundles/{id}/views`, T51). */
+export interface SavedView {
+  name: string;
+  title: string;
+}
+
 /** SSE events of `POST /sessions/{sid}/chat` (docs/api.md → "Chat events"). */
 export type ChatEvent =
   | { type: 'token'; text: string }
