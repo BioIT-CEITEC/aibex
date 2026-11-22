@@ -55,7 +55,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Phase 4 – Level 2 widgets
 - [x] T40a Widget validation (code size/blocklist, input SQL read-only) + `panel-data` input resolution with `$selected` as a bound parameter [A4.2, A4.3] (after: T13b, T15b)
-- [ ] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
+- [x] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
 - [ ] T41a Iframe runtime: srcdoc with CSP + inlined React and Plotly (minified dist), postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
 - [ ] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
 - [ ] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
@@ -71,6 +71,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T40b · done · `create_widget` in `aibex/llm/tools.py` (OpenAI schema + function, dispatched by
+  `run_tool`): builds a `widget` panel and applies it as one JSON Patch through the normal session validation (so the
+  T40a code/SQL checks apply; rejected → `failed_change`, spec unchanged). New id → panel appended + layout item at
+  the bottom (`x 0, y = max(y+h), w 6, h 8`), summary `add widget <id>`; existing widget id → `test` + `replace` of
+  that panel (layout kept, empty title keeps the old one), `replace widget <id>`; non-widget id → error. Result adds
+  `panel_id`. Tolerates double-encoded `inputs` and omitted inputs/title/language. System prompt now lists
+  create_widget (last resort; inputs/`$selected`/`data.inputs.<name>` = `{columns, rows}`, React/Plotly globals, no
+  network); `test_prompt_names_every_tool` no longer skips it. docs/api.md implementation note. Tests: 14 new in
+  `tests/test_tools.py` (placement, replace + undo, non-widget id, 9 rejections, defaults, FakeProvider "add widget"
+  through the chat loop). Checks: `make test` 429 pass + ruff clean (no frontend change); acceptance phases 1–4
+  **66/66 pass** (A4.1–A4.3 now meaningful). Not a UI task, no e2e run (E4.1 still needs the iframe runtime, T41a/b).
+  `make accept-phase` was refused by the runner again; ran the same pytest command directly. No new dependencies.
+  Next: T41a.
 - 2026-11-22 · T40a · done · New `aibex/widgets.py`: widget inputs run through the read-only guard (`run_query`,
   ≤ 5000 rows each) and `POST /panel-data` for a widget returns `{inputs: {name: {columns, rows, truncated}}}` (no more
   501); `$selected` is a DuckDB named parameter bound to the first key of `selection` (NULL when empty), never

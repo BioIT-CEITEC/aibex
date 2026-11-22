@@ -88,6 +88,42 @@ TOOL_SCHEMAS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "create_widget",
+            "description": (
+                "Add (or replace, same id) a Level 2 widget panel: a small React component (TSX) that runs in a "
+                "sandboxed iframe without network. Its data come from read-only SQL inputs resolved by the server "
+                "(max 5000 rows each; `$selected` = the first selected key, or NULL). The component is "
+                "`export default function Widget({data, selection, onSelect})`; `data.inputs.<name>` is "
+                "{columns, rows} with rows as arrays aligned with columns; `React` and `Plotly` are globals; "
+                "call onSelect([keys]) to select. The panel is placed at the bottom of the grid."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "kebab-case panel id, e.g. editing-sites-gene"},
+                    "title": {"type": "string"},
+                    "inputs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "identifier, e.g. sites"},
+                                "sql": {"type": "string", "description": "one read-only DuckDB SELECT"},
+                            },
+                            "required": ["name", "sql"],
+                        },
+                    },
+                    "code": {"type": "string", "description": "TSX source with `export default function Widget`"},
+                    "language": {"type": "string", "enum": ["tsx", "jsx"], "default": "tsx"},
+                },
+                "required": ["id", "title", "inputs", "code"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "undo_view",
             "description": "Undo the last change(s) to the view.",
             "parameters": {
@@ -239,6 +275,106 @@ def update_view(session: Session, patch: Any, summary: Any = None) -> ToolOutcom
     )
 
 
+WIDGET_W, WIDGET_H = 6, 8  # docs/api.md → "Level 2 widget runtime": new widgets go to the bottom, w 6, h 8
+
+
+def _widget_patch(spec: dict, panel: dict) -> tuple[list[dict], str] | str:
+    """JSON Patch that adds `panel` (+ a layout item at the bottom) or replaces the widget with the same id.
+
+    Returns `(patch, summary)` or an error message. Every op is guarded by a `test` on the id it touches, so the patch
+    cannot silently hit another panel.
+    """
+    pid = panel["id"]
+    panels = spec.get("panels") or []
+    for i, p in enumerate(panels):
+        if isinstance(p, dict) and p.get("id") == pid:
+            if p.get("type") != "widget":
+                return (
+                    f"panel id {pid!r} is already used by a {p.get('type')} panel; choose another id "
+                    "(create_widget only replaces widgets)"
+                )
+            if not panel.get("title") and p.get("title"):
+                panel["title"] = p["title"]
+            patch = [
+                {"op": "test", "path": f"/panels/{i}/id", "value": pid},
+                {"op": "replace", "path": f"/panels/{i}", "value": panel},
+            ]
+            if not any(isinstance(it, dict) and it.get("i") == pid for it in spec.get("layout") or []):
+                patch.append({"op": "add", "path": "/layout/-", "value": _bottom_item(spec, pid)})
+            return patch, f"replace widget {pid}"
+    patch = [
+        {"op": "add", "path": "/panels/-", "value": panel},
+        {"op": "add", "path": "/layout/-", "value": _bottom_item(spec, pid)},
+    ]
+    return patch, f"add widget {pid}"
+
+
+def _bottom_item(spec: dict, pid: str) -> dict:
+    bottom = 0
+    for it in spec.get("layout") or []:
+        try:
+            bottom = max(bottom, int(it.get("y", 0)) + int(it.get("h", 0)))
+        except (AttributeError, TypeError, ValueError):
+            continue
+    return {"i": pid, "x": 0, "y": bottom, "w": WIDGET_W, "h": WIDGET_H}
+
+
+def _coerce_inputs(inputs: Any) -> Any:
+    if isinstance(inputs, str):  # double-encoded by some models
+        try:
+            inputs = json.loads(inputs)
+        except json.JSONDecodeError:
+            return inputs
+    if inputs is None:
+        return []
+    if isinstance(inputs, dict) and "sql" in inputs:
+        inputs = [inputs]
+    return inputs
+
+
+def create_widget(
+    session: Session,
+    id: Any,  # the tool argument is called `id`
+    title: Any = None,
+    inputs: Any = None,
+    code: Any = None,
+    language: Any = None,
+) -> ToolOutcome:
+    """Add a widget panel at the bottom of the grid, or replace the widget with the same id; one version (`llm`).
+
+    The panel is validated like any patch (code size/blocklist, read-only input SQL with only `$selected`, dry run);
+    on errors nothing changes and the errors go back to the model.
+    """
+    errors = []
+    if not isinstance(id, str) or not id.strip():
+        errors.append("create_widget needs 'id': a kebab-case panel id such as 'editing-sites'")
+    if not isinstance(code, str) or not code.strip():
+        errors.append("create_widget needs 'code': TSX source with `export default function Widget({data})`")
+    inputs = _coerce_inputs(inputs)
+    if not isinstance(inputs, list):
+        errors.append("'inputs' must be a list of {name, sql} objects")
+    if title is not None and not isinstance(title, str):
+        errors.append("'title' must be a string")
+    if errors:
+        return ToolOutcome("create_widget", _err(*errors), failed_change=True)
+    panel: dict[str, Any] = {"id": id.strip(), "type": "widget", "title": (title or "").strip(), "inputs": inputs,
+                             "code": code, "language": language or "tsx"}
+    planned = _widget_patch(session.spec, panel)
+    if isinstance(planned, str):
+        return ToolOutcome("create_widget", _err(planned), failed_change=True)
+    patch, summary = planned
+    try:
+        session.apply_patch(patch, summary, source="llm")
+    except PatchError as exc:
+        return ToolOutcome("create_widget", _err(*exc.errors), failed_change=True)
+    return ToolOutcome(
+        "create_widget",
+        {"ok": True, "version": session.version, "panel_id": panel["id"]},
+        changed=True,
+        summary=session.history[-1]["summary"],
+    )
+
+
 def undo_view(session: Session, steps: Any = 1) -> ToolOutcome:
     """Undo `steps` changes (clamped) as one new version (source `llm`)."""
     try:
@@ -284,7 +420,14 @@ def run_tool(session: Session, name: str, arguments: Any) -> ToolOutcome:
         if name == "undo_view":
             return undo_view(session, arguments.get("steps", 1))
         if name == "create_widget":
-            return ToolOutcome(name, _err("create_widget is not available yet"), failed_change=True)
+            return create_widget(
+                session,
+                arguments.get("id"),
+                arguments.get("title"),
+                arguments.get("inputs"),
+                arguments.get("code"),
+                arguments.get("language"),
+            )
     except Exception as exc:  # noqa: BLE001 – a tool must never crash the chat loop
         return ToolOutcome(
             name, _err(f"{name} failed: {type(exc).__name__}: {str(exc)[:300]}"), failed_change=failed

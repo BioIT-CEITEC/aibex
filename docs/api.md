@@ -73,8 +73,14 @@ class LLMProvider(Protocol):
 - Each applied `update_view` / `create_widget` / `undo_view` is one new version with `source: "llm"` (decided, Q6).
 - Privacy rule: no tool result may contain more than **200 rows**; `describe_bundle` returns schema + summary stats only.
   The provider must never receive whole tables.
-- Implementation (T22a, `aibex/llm/tools.py`): `TOOL_SCHEMAS` (OpenAI function definitions; `create_widget` is added in
-  T40b, until then it returns an error), plain functions `describe_bundle(bundle)`, `query_data(bundle, sql)`,
+- Implementation (T40b) of `create_widget(id, title, inputs, code[, language])`: builds a `widget` panel and applies it
+  as one JSON Patch through the normal session validation (so code size/blocklist, read-only input SQL, `$selected`
+  only and the `LIMIT 0` dry run all apply). New id → `add /panels/-` + `add /layout/-` with `{x: 0, y: <bottom of the
+  grid>, w: 6, h: 8}`, summary `add widget <id>`; id of an existing widget → `test` + `replace /panels/<i>` (layout
+  kept, an empty title keeps the old title), summary `replace widget <id>`; id of a non-widget panel → error. Result
+  `{"ok": true, "version": n, "panel_id": id}`. `inputs` may be omitted (= `[]`) or double-encoded as a JSON string.
+  Undo is the normal session undo.
+- Implementation (T22a, `aibex/llm/tools.py`): `TOOL_SCHEMAS` (OpenAI function definitions), plain functions `describe_bundle(bundle)`, `query_data(bundle, sql)`,
   `update_view(session, patch, summary)`, `undo_view(session, steps)` and the dispatcher
   `run_tool(session, name, arguments) -> ToolOutcome(name, result, changed, failed_change, summary)`; `content()` is
   the JSON string for the tool message. Tools never raise: errors are `{"ok": false, "errors": [...]}`.
@@ -101,7 +107,8 @@ class LLMProvider(Protocol):
   fallback). The system message is the prompt + `# Current panels` (one line per panel: `index: id (type/kind,
   table) "title"`, `panel_index_text`) + the fenced JSON `{schema, spec, panel_index}`. The prompt itself contains no
   ``` fences. `tests/test_prompts.py` keeps it in sync (tool names, expr function allow-list, examples validate).
-  **Update the prompt when docs/spec-format.md changes**; `create_widget` is added to it in T40b.
+  **Update the prompt when docs/spec-format.md changes**. `create_widget` (T40b) is described there as a last resort
+  when no plot/table/text panel fits, with the input/`$selected`/`data.inputs.<name>` contract.
 - SSE: `StreamingResponse` (`text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`); events are sent
   as they happen (tool/spec per step). The final reply is one `token` event (no per-token streaming from the provider
   yet).

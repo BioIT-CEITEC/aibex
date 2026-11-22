@@ -40,8 +40,6 @@ def session(bundle):
 def test_prompt_names_every_tool():
     for t in TOOL_SCHEMAS:
         name = t["function"]["name"]
-        if name == "create_widget":  # added to the prompt with T40b
-            continue
         assert f"{name}(" in SYSTEM_PROMPT
 
 

@@ -46,7 +46,7 @@ def _title_patch(session, title="New title"):
 
 # --- schemas --------------------------------------------------------------------------------------------------------
 def test_tool_schemas_are_openai_functions():
-    assert TOOL_NAMES == ["describe_bundle", "query_data", "update_view", "undo_view"]
+    assert TOOL_NAMES == ["describe_bundle", "query_data", "update_view", "create_widget", "undo_view"]
     for t in TOOL_SCHEMAS:
         assert t["type"] == "function"
         fn = t["function"]
@@ -224,3 +224,97 @@ def test_run_tool_catches_unexpected_errors(session, monkeypatch):
     monkeypatch.setattr(tools, "describe_bundle", boom)
     out = run_tool(session, "describe_bundle", {})
     assert out.result["ok"] is False and "disk on fire" in out.result["errors"][0]
+
+
+# --- create_widget (T40b) -------------------------------------------------------------------------------------------
+W_CODE = "export default function Widget({ data }) {\n  return <div>{data.inputs.sites.rows.length}</div>;\n}\n"
+W_INPUTS = [{"name": "sites", "sql": "SELECT site_id, delta FROM editing LIMIT 10"}]
+
+
+def _widget(session, **kw):
+    args = {"id": "site-count", "title": "Site count", "inputs": W_INPUTS, "code": W_CODE, **kw}
+    return run_tool(session, "create_widget", args)
+
+
+def test_create_widget_appends_panel_and_bottom_layout(session):
+    before = session.spec
+    bottom = max(it["y"] + it["h"] for it in before["layout"])
+    out = _widget(session)
+    assert out.result == {"ok": True, "version": 1, "panel_id": "site-count"} and out.changed
+    spec = session.spec
+    assert len(spec["panels"]) == len(before["panels"]) + 1
+    w = spec["panels"][-1]
+    assert w == {
+        "id": "site-count",
+        "type": "widget",
+        "title": "Site count",
+        "inputs": W_INPUTS,
+        "code": W_CODE,
+        "language": "tsx",
+    }
+    assert spec["layout"][-1] == {"i": "site-count", "x": 0, "y": bottom, "w": 6, "h": 8}
+    assert spec["layout"][:-1] == before["layout"]  # other panels untouched
+    assert session.history[-1] == {"version": 1, "summary": "add widget site-count", "source": "llm"}
+
+
+def test_create_widget_same_id_replaces_widget(session):
+    _widget(session)
+    n_panels, layout = len(session.spec["panels"]), session.spec["layout"]
+    out = _widget(session, code=W_CODE.replace("<div>", "<div>n = "), title="")
+    assert out.changed and session.version == 2
+    spec = session.spec
+    assert len(spec["panels"]) == n_panels and spec["layout"] == layout
+    w = next(p for p in spec["panels"] if p["id"] == "site-count")
+    assert "n = " in w["code"] and w["title"] == "Site count"  # empty title keeps the old one
+    assert session.history[-1]["summary"] == "replace widget site-count"
+    session.undo(1)
+    assert "n = " not in next(p for p in session.spec["panels"] if p["id"] == "site-count")["code"]
+
+
+def test_create_widget_id_of_non_widget_panel_is_error(session):
+    plot_id = session.spec["panels"][0]["id"]
+    out = _widget(session, id=plot_id)
+    assert out.result["ok"] is False and out.failed_change and "already used" in out.result["errors"][0]
+    assert session.version == 0
+
+
+@pytest.mark.parametrize(
+    "kw,needle",
+    [
+        ({"code": W_CODE + "fetch('https://x');"}, "fetch"),
+        ({"code": W_CODE + "//" + "x" * 60_000}, ""),
+        ({"inputs": [{"name": "sites", "sql": "DROP TABLE editing"}]}, ""),
+        ({"inputs": [{"name": "sites", "sql": "SELECT * FROM nope"}]}, ""),
+        ({"inputs": [{"name": "sites", "sql": "SELECT * FROM editing WHERE gene_id = $gene"}]}, ""),
+        ({"id": "Not Kebab"}, ""),
+        ({"language": "python"}, ""),
+        ({"code": ""}, "code"),
+        ({"inputs": "not json"}, "inputs"),
+    ],
+)
+def test_create_widget_rejects_bad_widgets(session, kw, needle):
+    before = session.spec
+    out = _widget(session, **kw)
+    assert out.result["ok"] is False and out.failed_change and not out.changed
+    assert out.result["errors"] and needle in " ".join(out.result["errors"])
+    assert session.version == 0 and session.spec == before
+
+
+def test_create_widget_tolerates_encoded_inputs_and_defaults(session):
+    out = run_tool(session, "create_widget", {"id": "w-one", "inputs": json.dumps(W_INPUTS), "code": W_CODE})
+    assert out.changed
+    w = session.spec["panels"][-1]
+    assert w["inputs"] == W_INPUTS and w["language"] == "tsx" and w["title"] == ""
+    out = run_tool(session, "create_widget", {"id": "w-two", "code": W_CODE})  # no inputs = no data
+    assert out.changed and session.spec["panels"][-1]["inputs"] == []
+
+
+def test_fake_add_widget_end_to_end(session):
+    """FakeProvider 'add widget' → chat loop → create_widget applied (the e2e E4.1 path)."""
+    from aibex.llm.chat import run_chat
+    from aibex.llm.fake import FakeProvider
+
+    out = run_chat(session, FakeProvider(), "add widget")
+    assert session.version == 1, out
+    assert any(p["id"] == "row-count" and p["type"] == "widget" for p in session.spec["panels"])
+    assert any(it["i"] == "row-count" for it in session.spec["layout"])
