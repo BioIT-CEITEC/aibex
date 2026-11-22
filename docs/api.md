@@ -176,12 +176,14 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   fixed so the largest loading is positive; fewer than 2 varying rows → 400). Heatmap `row` is the matrix key; explicit
   `values` match the key case-insensitively and keep their order; `top_n` ranks by `min(<by column>)` per linked key,
   ties by key; `row-z` uses the sample SD (SD 0 → 0); columns are grouped by `group_by` (first appearance) keeping
-  samples.tsv order; only whole rows fit under the 5000-row cap (`truncated: true`). Not yet implemented:
-  `widget` (T40a) answers **501**; `selection` is accepted but only used by widget inputs. A failing panel
-  query answers **400** `{detail}`. In `expr`, `log`/`log2`/`log10`/`ln` of values ≤ 0 and `sqrt` of negative values
+  samples.tsv order; only whole rows fit under the 5000-row cap (`truncated: true`). `selection` is accepted for
+  every panel but only used by widget inputs. A failing panel query (incl. a failing widget input) answers
+  **400** `{detail}`. In `expr`, `log`/`log2`/`log10`/`ln` of values ≤ 0 and `sqrt` of negative values
   give null instead of a DuckDB error (e.g. `-log10(padj)` with `padj = 0`).
 - `widget` panels return `{inputs: {name: {columns, rows, truncated}}}` instead; each input max 5000 rows; `$selected` in
   input SQL is bound (as a parameter, never string-formatted) to the first selected key, or NULL when nothing is selected.
+  Implementation `aibex/widgets.py` (T40a): inputs run through the read-only guard (`run_query`); spec filters do not
+  apply to widget inputs (free-form SQL – the widget's SQL decides what it shows).
 
 ## Filters
 - A filter is either `{id, table, field, op, value, label?, enabled}` or `{id, table, expr, label?, enabled}` where `expr`
@@ -210,7 +212,8 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   functions log, log2, log10, ln, abs, sqrt, round, least, greatest, coalesce. Nothing else (no subqueries, no other
   functions, no casts, no `;`). Validate by parsing (e.g. a small tokenizer + allow-list), never by regex on the whole string.
 - widget `code` ≤ 50 000 characters; must not contain `fetch(`, `XMLHttpRequest`, `WebSocket`, `importScripts`, `document.cookie`, `localStorage`
-- widget input `sql` must pass the read-only query guard
+- widget input `sql` must pass the read-only query guard, use no parameter other than `$selected` (no `?`, `$1`,
+  `$other`), and bind in a `LIMIT 0` dry run against the bundle (unknown tables/columns are reported)
 - `plotly` overrides are plain JSON (no functions)
 
 ## Default view (generated when bundle.yaml has no `default_view`)

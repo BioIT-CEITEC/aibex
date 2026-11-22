@@ -8,7 +8,8 @@ Semantic checks:
   DuckDB (a dry run with `LIMIT 0` on the compiled, normalised SQL – never on the raw string)
 - `pca` / `heatmap`: the table is a matrix table (≥ 2 sample columns); `color.field` / `group_by` are samples.tsv
   columns; `rows.by` is `<table>.<column>` of the matrix table or a table linked to it
-- widgets: code ≤ 50 000 characters, no network/storage APIs; input SQL passes the read-only query guard
+- widgets: code ≤ 50 000 characters, no network/storage APIs; input SQL passes the read-only query guard,
+  uses no parameter but `$selected` and binds in a `LIMIT 0` dry run (unknown tables/columns are reported)
 
 Errors are short, human-readable strings with a location prefix (`panels[0].x.field: ...`), so the LLM can repair
 its patch. `validate_spec` never raises.
@@ -24,8 +25,9 @@ import duckdb
 
 from aibex.bundles import Bundle
 from aibex.expr import ExprError, compile_expr
-from aibex.query import QueryError, check_readonly
+from aibex.query import QueryError
 from aibex.spec import Filter, PlotPanel, Spec, TablePanel, WidgetPanel, parse_spec
+from aibex.widgets import check_input
 
 MAX_WIDGET_CODE = 50_000
 # docs/api.md: the sandbox has no network anyway (CSP); this catches obvious attempts early and tells the LLM why
@@ -163,7 +165,7 @@ class _Checker:
                          "data arrive through `inputs`)")
         for i, inp in enumerate(p.inputs):
             try:
-                check_readonly(inp.sql)
+                check_input(self.bundle, inp.sql)
             except QueryError as exc:
                 self.err(f"{loc}.inputs[{i}].sql", str(exc))
 

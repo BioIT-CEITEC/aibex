@@ -42,7 +42,7 @@ class PatchRequest(BaseModel):
 
 class PanelDataRequest(BaseModel):
     panel_id: str
-    selection: list[Any] | None = None  # used by widget inputs ($selected, T40a); plot/table panels ignore it
+    selection: list[Any] | None = None  # used by widget inputs ($selected = first key); plot/table panels ignore it
 
 
 class ChatRequest(BaseModel):
@@ -164,7 +164,7 @@ def _api_router() -> APIRouter:
         if spec is None:  # cannot happen for a stored (validated) spec; never crash on it
             raise HTTPException(status_code=500, detail="; ".join(errors))
         try:
-            return panel_data(spec, s.bundle, body.panel_id)
+            return panel_data(spec, s.bundle, body.panel_id, body.selection)
         except PanelNotFound:
             raise HTTPException(status_code=404, detail=f"unknown panel {body.panel_id!r}") from None
         except PanelDataUnsupported as exc:

@@ -109,6 +109,26 @@ def check_readonly(sql: str) -> str:
     return st.query.strip().rstrip(";").strip()
 
 
+def sql_parameters(sql: str) -> list[str]:
+    """Prepared-statement parameters used in sql, in order of first use: `$name` → "name", `$1` → "1", `?` → "?".
+    Inside string literals and comments they are separate tokens and do not count."""
+    toks = _tokens(sql)
+    found: list[str] = []
+    for i, (text, ttype) in enumerate(toks):
+        name = None
+        if ttype == "operator" and text == "$" and i + 1 < len(toks):
+            nxt, ntype = toks[i + 1]
+            if ntype in {"identifier", "keyword", "numeric_const"}:
+                name = nxt.strip('"')
+        elif ttype == "operator" and text == "?":
+            name = "?"
+        elif ttype == "operator" and text.startswith("$") and len(text) > 1:  # tokenizer variants: "$selected"
+            name = text[1:]
+        if name is not None and name not in found:
+            found.append(name)
+    return found
+
+
 def clamp_limit(limit: int | None) -> int:
     if limit is None:
         return DEFAULT_LIMIT
@@ -137,9 +157,10 @@ def jsonable(v: Any) -> Any:
 
 
 def run_query(
-    cur: duckdb.DuckDBPyConnection, sql: str, limit: int | None = None, params: list | None = None
+    cur: duckdb.DuckDBPyConnection, sql: str, limit: int | None = None, params: list | dict | None = None
 ) -> dict:
-    """Run a guarded read-only query: `{columns, rows, row_count, truncated}` (rows as arrays, ≤ limit)."""
+    """Run a guarded read-only query: `{columns, rows, row_count, truncated}` (rows as arrays, ≤ limit).
+    `params` are bound by DuckDB (positional list, or a dict for `$name` parameters) – never string-formatted."""
     stmt = check_readonly(sql)
     n = clamp_limit(limit)
     try:

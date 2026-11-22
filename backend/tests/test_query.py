@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from aibex.bundles import load_bundle
 from aibex.config import Settings
 from aibex.main import create_app
-from aibex.query import QueryError, check_readonly, clamp_limit, jsonable, run_query
+from aibex.query import QueryError, check_readonly, clamp_limit, jsonable, run_query, sql_parameters
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -111,6 +111,25 @@ def test_run_query_with_params(bundle):
     gene = run_query(bundle.cursor(), "SELECT gene_id FROM de LIMIT 1")["rows"][0][0]
     out = run_query(bundle.cursor(), "SELECT gene_id FROM de WHERE gene_id = ?", params=[gene])
     assert out["rows"] == [[gene]]
+
+
+def test_run_query_with_named_params(bundle):
+    gene = run_query(bundle.cursor(), "SELECT gene_id FROM de LIMIT 1")["rows"][0][0]
+    out = run_query(bundle.cursor(), "SELECT gene_id FROM de WHERE gene_id = $selected", params={"selected": gene})
+    assert out["rows"] == [[gene]]
+
+
+@pytest.mark.parametrize(
+    ("sql", "expected"),
+    [
+        ("SELECT 1", []),
+        ("SELECT * FROM de WHERE gene_id = $selected OR $selected IS NULL", ["selected"]),
+        ("SELECT * FROM de WHERE gene_id = ? AND x = $1 AND y = $other", ["?", "1", "other"]),
+        ("SELECT '$selected', '?' -- $hidden ?", []),  # inside literals / comments
+    ],
+)
+def test_sql_parameters(sql, expected):
+    assert sql_parameters(sql) == expected
 
 
 def test_run_query_sql_error_is_query_error(bundle):

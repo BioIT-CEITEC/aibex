@@ -12,7 +12,8 @@ quoted, `expr`s are compiled by aibex/expr.py (the raw string never runs) and fi
 - `table` panels: the listed columns (all when omitted) in order, plus the key column at the end when not listed;
   sorted as specified, then by the key.
 - `pca` / `heatmap` panels: computed from the matrix table in aibex/matrix_panels.py (filters applied first);
-  `widget` panels: task T40a (raise `PanelDataUnsupported`).
+  `widget` panels: `{inputs: {name: {columns, rows, truncated}}}` from aibex/widgets.py (`$selected` bound to the
+  first selected key; spec filters do not apply to free-form widget SQL).
 - `text` panels have no data (empty result).
 
 A filter applies to panels on its own table and, one hop through a bundle link in either direction, to panels on
@@ -29,8 +30,9 @@ from aibex.bundles import Bundle
 from aibex.default_view import find_role
 from aibex.expr import compile_expr
 from aibex.matrix_panels import MatrixPanelError, heatmap_data, pca_data
-from aibex.query import jsonable
-from aibex.spec import Filter, PlotPanel, Spec, TablePanel, TextPanel
+from aibex.query import QueryError, jsonable
+from aibex.spec import Filter, PlotPanel, Spec, TablePanel, TextPanel, WidgetPanel
+from aibex.widgets import resolve_inputs
 
 MAX_ROWS = 5000  # table panels (and widget inputs)
 MAX_PLOT_ROWS = 40000  # plot panels: a whole DE table fits (WebGL scatter); most interesting rows first (T34, Q11)
@@ -190,14 +192,19 @@ def _table_select(p: TablePanel, bundle: Bundle, key: str | None) -> tuple[list[
     return [q(c) for c in cols], cols, ", ".join(order)
 
 
-def panel_data(spec: Spec, bundle: Bundle, panel_id: str) -> dict:
-    """`{columns, rows, truncated}` for a panel (max 5000 rows). Raises PanelNotFound / PanelDataUnsupported /
-    PanelDataError."""
+def panel_data(spec: Spec, bundle: Bundle, panel_id: str, selection: list[Any] | None = None) -> dict:
+    """`{columns, rows, truncated}` for a panel (max 5000 rows; widgets `{inputs: {...}}`). `selection` is used only
+    by widget inputs (`$selected`). Raises PanelNotFound / PanelDataUnsupported / PanelDataError."""
     panel = next((p for p in spec.panels if p.id == panel_id), None)
     if panel is None:
         raise PanelNotFound(panel_id)
     if isinstance(panel, TextPanel):
         return {"columns": [], "rows": [], "truncated": False}
+    if isinstance(panel, WidgetPanel):
+        try:
+            return resolve_inputs(panel, bundle, selection)
+        except QueryError as exc:
+            raise PanelDataError(f"panel {panel_id!r}: {exc}") from None
     if not isinstance(panel, (PlotPanel, TablePanel)):
         raise PanelDataUnsupported(f"panel data for {panel.type} panels is not implemented yet (task T40a)")
     if panel.table not in bundle.tables:

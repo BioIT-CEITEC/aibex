@@ -246,15 +246,80 @@ def test_text_panel_empty_unknown_panel_and_unsupported(bundle):
     assert panel_data(spec, bundle, "notes") == {"columns": [], "rows": [], "truncated": False}
     with pytest.raises(PanelNotFound):
         panel_data(spec, bundle, "nope")
-    # pca/heatmap are implemented since T15c (tests/test_matrix_panels.py); widgets still answer 501 (T40a)
+    # pca/heatmap are implemented since T15c (tests/test_matrix_panels.py), widgets since T40a (below)
     assert panel_data(spec, bundle, "pca")["columns"][:3] == ["x", "y", "sample"]
     assert issubclass(PanelDataUnsupported, ValueError)
+
+
+# --- widget inputs (T40a) --------------------------------------------------------------------------------------
+def _widget(*inputs: tuple[str, str]) -> dict:
+    return {"id": "w", "type": "widget", "title": "W",
+            "inputs": [{"name": n, "sql": s} for n, s in inputs],
+            "code": "export default function Widget() { return null }"}
+
+
+def test_widget_inputs_resolved(bundle):
+    w = _widget(("sites", "SELECT site_id, delta FROM editing ORDER BY site_id LIMIT 50"),
+                ("n", "SELECT count(*) AS n FROM de"))
+    d = _data(bundle, [w])
+    assert set(d) == {"inputs"}
+    assert d["inputs"]["sites"]["columns"] == ["site_id", "delta"]
+    assert len(d["inputs"]["sites"]["rows"]) == 50 and d["inputs"]["sites"]["truncated"] is False
+    assert d["inputs"]["n"]["rows"] == [[200]]
+
+
+def test_widget_input_capped_at_5000(bundle):
+    d = _data(bundle, [_widget(("many", "SELECT range AS i FROM range(6000)"))])
+    assert len(d["inputs"]["many"]["rows"]) == 5000 and d["inputs"]["many"]["truncated"] is True
+
+
+def test_widget_selected_is_bound_parameter(bundle):
+    w = _widget(("sites", "SELECT site_id FROM editing WHERE gene_id = $selected OR $selected IS NULL"))
+    spec, errors = validate_spec(_spec([w]), bundle)
+    assert not errors, errors
+    all_rows = panel_data(spec, bundle, "w")["inputs"]["sites"]["rows"]
+    assert len(all_rows) == 300  # nothing selected → NULL
+    (gene,) = _q(bundle, "SELECT gene_id FROM editing LIMIT 1")[0]
+    (n,) = _q(bundle, f"SELECT count(*) FROM editing WHERE gene_id = '{gene}'")[0]
+    one = panel_data(spec, bundle, "w", selection=[gene, "ignored-second-key"])["inputs"]["sites"]["rows"]
+    assert len(one) == n >= 1
+    # a malicious "key" is a value, never SQL
+    evil = panel_data(spec, bundle, "w", selection=["x' OR '1'='1"])["inputs"]["sites"]["rows"]
+    assert evil == []
+
+
+def test_widget_filters_do_not_apply(bundle):
+    w = _widget(("sites", "SELECT site_id FROM editing"))
+    flt = [{"id": "f", "table": "editing", "field": "delta", "op": ">", "value": 0}]
+    assert len(_data(bundle, [w], flt)["inputs"]["sites"]["rows"]) == 300
+
+
+def test_widget_input_runtime_error_is_panel_error(bundle):
+    w = _widget(("bad", "SELECT CAST(site_id AS INTEGER) AS x FROM editing"))  # binds fine, fails at run time
+    spec, errors = validate_spec(_spec([w]), bundle)
+    assert not errors, errors
+    with pytest.raises(pd_mod.PanelDataError, match="input 'bad'"):
+        panel_data(spec, bundle, "w")
 
 
 # --- endpoint --------------------------------------------------------------------------------------------------
 @pytest.fixture()
 def client(data_dir):
     return TestClient(create_app(Settings(data_dir=data_dir, llm_provider="fake")))
+
+
+def test_endpoint_widget_inputs_with_selection(client, bundle):
+    sid = client.post("/api/sessions", json={"bundle": "toy"}).json()["session_id"]
+    w = _widget(("sites", "SELECT site_id FROM editing WHERE gene_id = $selected"))
+    add = [{"op": "add", "path": "/panels/-", "value": w},
+           {"op": "add", "path": "/layout/-", "value": {"i": "w", "x": 0, "y": 99, "w": 6, "h": 8}}]
+    assert client.post(f"/api/sessions/{sid}/patch", json={"patch": add}).status_code == 200
+    url = f"/api/sessions/{sid}/panel-data"
+    r = client.post(url, json={"panel_id": "w"})
+    assert r.status_code == 200 and r.json()["inputs"]["sites"]["rows"] == []
+    (gene,) = _q(bundle, "SELECT gene_id FROM editing LIMIT 1")[0]
+    r = client.post(url, json={"panel_id": "w", "selection": [gene]})
+    assert r.status_code == 200 and len(r.json()["inputs"]["sites"]["rows"]) >= 1
 
 
 def test_endpoint_follows_current_spec_and_undo(client):
