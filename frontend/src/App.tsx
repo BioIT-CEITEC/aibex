@@ -7,6 +7,8 @@ import { FiltersBar } from '@/components/FiltersBar';
 import { UndoRedoButtons } from '@/components/History';
 import { SavedViews } from '@/components/SavedViews';
 import { SelectionBar } from '@/components/SelectionBar';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { useDocumentTheme } from '@/lib/useDocumentTheme';
 import { Spinner } from '@/components/ui/spinner';
 import { useAppStore } from '@/store';
 
@@ -18,6 +20,7 @@ export default function App() {
   const spec = useAppStore((s) => s.spec);
   const version = useAppStore((s) => s.version);
   const loading = useAppStore((s) => s.loading);
+  useDocumentTheme();
 
   useEffect(() => {
     void bootstrap(new URLSearchParams(window.location.search).get('bundle'));
@@ -26,13 +29,14 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center gap-4 border-b px-4 py-2">
-        <h1 className="text-lg font-semibold">Aibex View</h1>
+        <h1 className="shrink-0 whitespace-nowrap text-lg font-semibold">Aibex View</h1>
         <span className="truncate text-sm text-muted-foreground">{spec?.title}</span>
         <SelectionBar selectionKey={spec?.selection && spec.selection.linked !== false ? spec.selection.key : null} />
         <div className="ml-auto flex shrink-0 items-center gap-4">
           <BundleSelect />
           <SavedViews />
           <UndoRedoButtons />
+          <ThemeToggle />
           <span className="text-sm text-muted-foreground">
             version <span data-testid="spec-version">{version ?? '–'}</span>
           </span>

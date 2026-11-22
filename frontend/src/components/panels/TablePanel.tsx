@@ -116,7 +116,7 @@ export function TablePanel({
                 className={cn(
                   'odd:bg-muted/40 hover:bg-accent',
                   key !== null && 'cursor-pointer',
-                  isSel && 'bg-amber-100 font-medium odd:bg-amber-100 hover:bg-amber-200',
+                  isSel && 'bg-highlight font-medium odd:bg-highlight hover:bg-highlight-strong',
                 )}
                 title={key !== null ? 'Click to select (shift/ctrl-click: add or remove)' : undefined}
                 onClick={

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { modeOf, plotlyChrome } from '@/lib/palette';
 import type { usePanelData } from '@/lib/usePanelData';
 import type { WidgetPanel as WidgetPanelSpec } from '@/lib/types';
 import type { compileWidget } from '@/widget-runtime/compile';
@@ -45,6 +46,8 @@ export function WidgetPanel({ panel, state }: { panel: WidgetPanelSpec; state: R
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const selection = useAppStore((s) => s.selection);
   const select = useAppStore((s) => s.select);
+  const mode = useAppStore((s) => modeOf(s.spec?.theme));
+  const theme = useMemo(() => ({ mode, plotly: plotlyChrome(mode) }), [mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,10 +80,10 @@ export function WidgetPanel({ panel, state }: { panel: WidgetPanelSpec; state: R
   useEffect(() => {
     const win = frameRef.current?.contentWindow;
     if (!readyWindow || win !== readyWindow || !data || code === null) return;
-    const message: RenderMessage = { aibex: 1, type: 'render', code, data, selection };
+    const message: RenderMessage = { aibex: 1, type: 'render', code, data, selection, theme };
     // the sandboxed frame has an opaque origin, so '*' is the only target that works; the frame checks the source
     readyWindow.postMessage(message, '*');
-  }, [readyWindow, data, code, selection]);
+  }, [readyWindow, data, code, selection, theme]);
 
   if (loadError) return <p className="text-xs text-destructive">Could not load the widget runtime: {loadError}</p>;
 

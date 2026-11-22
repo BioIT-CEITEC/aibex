@@ -51,6 +51,10 @@ scatter, bar and pie traces only.
 - Trace x and y are flat arrays of numbers or strings, never arrays of arrays. To draw many line segments (e.g. \
 stems or connectors) in one trace, use flat arrays with null between segments: x [p1, p1, null, p2, p2, null]. \
 Prefer one plot; for stacked subplots give every axis a domain and an anchor (yaxis2: {domain, anchor: "x"}).
+- The dashboard has a light and a dark theme and fills in background, font, grid and axis colours for every Plotly \
+call: do not set paper_bgcolor, plot_bgcolor, template, font colour, gridcolor or linecolor, and do not give the root \
+element a background or text colour. Colour data marks with mid-tone colours (e.g. "#2a78d6" blue, "#e34948" red, \
+"#a8a7a0" grey) that read on both.
 - The widget fills its panel (style the root with width/height 100%). Keep it short (about 150 lines at most), \
 readable and robust: no crash on nulls or missing columns."""
 

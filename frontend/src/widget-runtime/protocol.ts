@@ -14,6 +14,11 @@ export interface RenderMessage {
   code: string;
   data: WidgetData;
   selection: string[];
+  /**
+   * Dashboard theme (T53). The frame sets `data-theme` on its <html> and fills in Plotly layout keys the widget leaves
+   * unset (`plotly` = themed defaults: transparent background, ink, grid, colorway). Optional for older parents.
+   */
+  theme?: { mode: 'light' | 'dark'; plotly: Record<string, unknown> };
 }
 
 /** Iframe → parent. */

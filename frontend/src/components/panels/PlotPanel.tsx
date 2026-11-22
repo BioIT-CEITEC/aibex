@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import { modeOf } from '@/lib/palette';
 import { buildFigure, highlightSelection, isSelectablePlot } from '@/lib/plotFigure';
 import type { PlotPanel as PlotPanelSpec } from '@/lib/types';
 import type { PanelDataState } from '@/lib/usePanelData';
@@ -30,18 +31,22 @@ export function PlotPanel({
   const { data } = state;
   const selection = useAppStore((s) => s.selection);
   const select = useAppStore((s) => s.select);
-  // zoom/pan survive redraws caused by selection or data changes, but reset when the panel spec changes
+  const mode = useAppStore((s) => modeOf(s.spec?.theme));
+  // zoom/pan survive redraws caused by selection, data or theme changes, but reset when the panel spec changes
   const revision = useMemo(() => JSON.stringify(panel), [panel]);
   const figure = useMemo(() => {
     if (!data) return null;
-    const fig = buildFigure(panel, data);
+    const fig = buildFigure(panel, data, mode);
     return { data: fig.data, layout: { ...fig.layout, uirevision: revision } };
-  }, [panel, data, revision]);
+  }, [panel, data, revision, mode]);
 
   const linked =
     !!selectionKey && !!data && isSelectablePlot(panel) && (panel.kind === 'heatmap' || data.columns.includes(selectionKey));
   const selected = useMemo(() => new Set(selection), [selection]);
-  const shown = useMemo(() => (figure && linked ? highlightSelection(panel, figure, selected) : figure), [figure, linked, panel, selected]);
+  const shown = useMemo(
+    () => (figure && linked ? highlightSelection(panel, figure, selected, mode) : figure),
+    [figure, linked, panel, selected, mode],
+  );
 
   const onPoints = useCallback(
     (points: PlotPoint[], how: PointsEvent) => {

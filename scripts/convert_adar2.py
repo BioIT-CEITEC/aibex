@@ -370,15 +370,16 @@ def default_view() -> dict:
     sig = "CASE WHEN padj < 0.05 AND abs(log2FoldChange) > 1 THEN 'significant' ELSE 'n.s.' END"
     gene_de = "CASE WHEN gene_padj < 0.05 THEN 'gene DE (padj < 0.05)' ELSE 'gene not DE' END"
     confident = f"CASE WHEN high_confidence = TRUE THEN '> {HIGH_CONFIDENCE_MIN_EDITED} edited reads' ELSE 'other' END"
-    grey = "#bbbbbb"
+    # app palette (frontend/src/lib/palette.ts, T53): readable on the light and the dark theme
+    red, blue, grey = "#e34948", "#2a78d6", "#a8a7a0"
     diagonal = {"type": "line", "xref": "x", "yref": "y", "x0": 0, "y0": 0, "x1": 1, "y1": 1,
-                "line": {"dash": "dot", "color": "#888888", "width": 1}}
+                "line": {"dash": "dot", "color": "#898781", "width": 1}}
     panels = [
         {"id": "volcano", "type": "plot", "title": f"Volcano: {KO} vs WT (expression)", "table": "de",
          "kind": "scatter",
          "x": {"field": "log2FoldChange", "label": f"log2 fold change ({KO} vs WT)"},
          "y": {"expr": "-log10(padj)", "label": "-log10 padj"},
-         "color": {"expr": sig, "palette": {"significant": "#d62728", "n.s.": grey}},
+         "color": {"expr": sig, "palette": {"significant": red, "n.s.": grey}},
          "label": {"field": "gene_name", "values": []}},
         {"id": "editing-vs-expression", "type": "plot", "title": "Editing change vs expression change (per site)",
          "description": "Each point is an editing site; x = log2 fold change of its gene, y = editing change "
@@ -386,7 +387,7 @@ def default_view() -> dict:
          "table": "editing", "kind": "scatter",
          "x": {"field": "gene_log2fc", "label": f"log2 fold change of the gene ({KO} vs WT)"},
          "y": {"field": "delta", "label": f"editing Δ ({KO} − WT)"},
-         "color": {"expr": gene_de, "palette": {"gene DE (padj < 0.05)": "#d62728", "gene not DE": grey}},
+         "color": {"expr": gene_de, "palette": {"gene DE (padj < 0.05)": red, "gene not DE": grey}},
          "label": {"field": "gene_name", "values": []},
          "plotly": {"layout": {"yaxis": {"zeroline": True}, "xaxis": {"zeroline": True}}}},
         {"id": "editing-levels", "type": "plot", "title": f"Editing level per site: WT vs {KO}",
@@ -394,12 +395,12 @@ def default_view() -> dict:
          "table": "editing", "kind": "scatter",
          "x": {"field": "edit_wt", "label": "editing level WT"},
          "y": {"field": "edit_adar", "label": f"editing level {KO}"},
-         "color": {"expr": confident, "palette": {f"> {HIGH_CONFIDENCE_MIN_EDITED} edited reads": "#1f77b4",
+         "color": {"expr": confident, "palette": {f"> {HIGH_CONFIDENCE_MIN_EDITED} edited reads": blue,
                                                   "other": grey}},
          "plotly": {"layout": {"shapes": [diagonal]}}},
         {"id": "pca", "type": "plot", "kind": "pca", "title": "PCA of samples (normalised counts)", "table": "counts",
          "description": f"Colour = genotype (ADAR = {KO}), shape = treatment of dams/pups (perampanel / placebo).",
-         "top_n": 500, "scale": "log1p", "color": {"field": "genotype", "palette": {DEN: "#1f77b4", NUM: "#d62728"}},
+         "top_n": 500, "scale": "log1p", "color": {"field": "genotype", "palette": {DEN: blue, NUM: red}},
          "symbol": {"field": "treatment"}},
         {"id": "edited-genes", "type": "table", "title": "Genes by number of editing sites", "table": "de",
          "columns": ["gene_name", "n_edit_sites", "mean_delta", "max_abs_delta", "edit_wt", "edit_adar",

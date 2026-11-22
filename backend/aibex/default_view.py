@@ -33,6 +33,9 @@ _LOG_SCALE_MEANS = {"basemean", "base_mean", "mean_expr", "meanexpr"}  # raw mea
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 PADJ_CUTOFF = 0.05
 LFC_CUTOFF = 1
+# Volcano/MA colours (T53): the app palette's red (readable on the light and the dark surface) and a mid grey that
+# recedes in both themes. See frontend/src/lib/palette.ts.
+SIG_PALETTE = {"significant": "#e34948", "n.s.": "#a8a7a0"}
 
 
 def find_role(columns: list[str], role: str) -> str | None:
@@ -117,7 +120,7 @@ def _de_panels(bundle: Bundle, de: str, roles: dict[str, str]) -> list[dict]:
         "kind": "scatter",
         "x": {"field": fc, "label": "log2 fold change"},
         "y": {"expr": f"-log10({_q(p)})", "label": f"-log10 {p_label}"},
-        "color": {"expr": sig, "palette": {"significant": "#d62728", "n.s.": "#bbbbbb"}},
+        "color": {"expr": sig, "palette": dict(SIG_PALETTE)},
     }
     if name:
         volcano["label"] = {"field": name, "values": []}
@@ -137,7 +140,7 @@ def _de_panels(bundle: Bundle, de: str, roles: dict[str, str]) -> list[dict]:
             "kind": "scatter",
             "x": x,
             "y": {"field": fc, "label": "log2 fold change"},
-            "color": {"expr": sig, "palette": {"significant": "#d62728", "n.s.": "#bbbbbb"}},
+            "color": {"expr": sig, "palette": dict(SIG_PALETTE)},
         })
 
     group = _group_column(bundle)

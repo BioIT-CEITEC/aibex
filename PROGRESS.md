@@ -65,13 +65,34 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
 - [x] T51 Saved views per bundle: `/bundles/{id}/views`, `/sessions/{sid}/load-view`, UI save/load; unit tests [P5.2] (after: T15, T24b)
 - [x] T52 Demo-script panel with the 6 demo prompts, click to send [P5.3] (after: T24a)
-- [ ] T53 Theme + palette pass (light/dark) [P5.4]; final screenshots of every demo prompt into `logs/screens/` (after: T50, T52)
+- [x] T53 Theme + palette pass (light/dark) [P5.4]; final screenshots of every demo prompt into `logs/screens/` (after: T50, T52)
 - [ ] T54 Production build check: `npm run build`, uvicorn serves `frontend/dist` at `/`, health ok; note any deploy change needed (after: T53)
 - [ ] T55 Deploy and run all demo prompts on the public URL [P5.5] – Vojta (after: T54)
 - [ ] T56 Harness mock on branch `demo/workshop-2026-11` (scope to be decided) – Vojta
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T53 · **done (P5.4)** · Light/dark theme comes from the spec (`theme.dark`, already in the
+  schema). A header button (`theme-toggle`) patches `/theme/dark` with source `user`, so the theme is undoable, saved
+  with a view, and the assistant can change it too. New `frontend/src/lib/palette.ts` holds one palette for the app:
+  8 categorical colours in a colour-blind-safe order (checked with a palette validator in both themes; the dark theme
+  uses the same hues stepped for the dark surface), single-hue blue sequential scales, blue ↔ grey ↔ red diverging
+  scales, and chart chrome (ink, grid, axis, label boxes, selection ring). Plotly backgrounds are now transparent, so
+  plots sit on the card. Category10 and Viridis are gone. `plotFigure` functions take a `mode`. Two fixes came from the
+  screenshots. (1) A numeric colour with nulls drew those points near-invisible; they are now a muted "no value"
+  trace underneath. (2) A colour with both signs (editing Δ) now gets the diverging scale centred at 0 instead of the
+  sequential one. Selection highlight uses a `--highlight` token (amber classes removed). Widgets: the render message
+  has an optional `theme`. The iframe sets `data-theme` and lays themed Plotly defaults *under* each
+  `Plotly.newPlot/react/plot` layout (docs/api.md). The live ADAR2 widget sets its own template and grid colours, so its
+  grid stays light in dark mode. `WIDGET_CODE_PROMPT` now tells the code model not to set them (+ unit test). Default
+  view and `convert_adar2.py` use palette hexes (red `#e34948`, blue `#2a78d6`, grey `#a8a7a0`). I re-ran the
+  converter with `--raw/--out` and got the same numbers (33 513 genes, 4 024 sites). Docs: spec-format.md (theme,
+  palette, default scales), api.md (widget theme). Screenshots, all checked: toy `logs/screens/P5.4-{light,dark,
+  dark-selection,dark-widget}.png`. Each demo prompt's end state on ADAR2 in both themes:
+  `T53-demo-{1..6}-{light,dark}.png` + `T53-demo-5-widget-*.png`, from new opt-in `e2e/real-adar2-demo.spec.ts`.
+  **These end states are hand-written patches, not live model output.** Live screenshots stay with T26/T33. Also
+  fixed: the "Aibex View" title wrapped in the header. Checks: `make test` 490 pass + ruff/typecheck/lint clean;
+  `make accept` 67/67; `make e2e` 36/36 (new `e2e/theme.spec.ts`, 3 tests); real-data e2e 13/13. No new dependencies.
 - 2026-11-22 · T52 · **done (P5.3)** · New collapsible "Demo script" section in the chat column, between History and
   Assistant (`demo-script`, buttons `demo-prompt-1…6`). It lists the 6 demo prompts from docs/roadmap.md
   (`frontend/src/lib/demoPrompts.ts`). A click sends the prompt as a chat message, the same as typing it; the chat

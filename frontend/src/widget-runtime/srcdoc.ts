@@ -13,6 +13,9 @@ html, body, #root { margin: 0; height: 100%; }
 body { font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: #18181b; background: transparent;
   overflow: auto; }
 .aibex-error { margin: 0; padding: 8px; color: #b91c1c; white-space: pre-wrap; font: 12px/1.4 ui-monospace, monospace; }
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="dark"] body { color: #f0efec; }
+html[data-theme="dark"] .aibex-error { color: #f87171; }
 `;
 
 /** A script body must not contain `</script` (closes the element early) or `<!--` (HTML script-data escape state). */

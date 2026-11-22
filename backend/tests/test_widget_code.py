@@ -100,6 +100,13 @@ def test_prompt_names_the_pitfalls_seen_in_the_live_adar2_widget():
     assert 'anchor: "x"' in WIDGET_CODE_PROMPT
 
 
+def test_prompt_leaves_theme_colours_to_the_dashboard():
+    # T53: the live ADAR2 widget set its own template/grid colours, which stay light-themed in the dark theme
+    for key in ("paper_bgcolor", "plot_bgcolor", "template", "gridcolor"):
+        assert key in WIDGET_CODE_PROMPT
+    assert "dark theme" in WIDGET_CODE_PROMPT
+
+
 def test_build_messages_contains_no_rows(bundle):
     user = build_messages(bundle, DESC, [{"name": "all", "sql": "SELECT * FROM editing"}], None, None)[1]["content"]
     rows = bundle.cursor().execute("SELECT site_id FROM editing LIMIT 5").fetchall()

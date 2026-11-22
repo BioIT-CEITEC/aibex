@@ -16,7 +16,7 @@ export function SelectionBar({ selectionKey }: { selectionKey: string | null }) 
   return (
     <div
       data-testid="selection-bar"
-      className="flex min-w-0 items-center gap-2 rounded-md bg-amber-100 px-2 py-0.5 text-sm"
+      className="flex min-w-0 items-center gap-2 rounded-md bg-highlight px-2 py-0.5 text-sm"
       title={selection.join(', ')}
     >
       <span className="shrink-0 font-medium">

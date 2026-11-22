@@ -1,6 +1,16 @@
 // Builds a Plotly figure (traces + layout) from a plot panel spec and its panel-data (docs/api.md → "Panel data
 // shape"). Pure function, no Plotly import, so it stays cheap and testable. Column names of the dataset are never
 // hard-coded: panel-data returns the generic columns x / y / color / size / label / facet plus the table key.
+import {
+  CATEGORICAL,
+  CHROME,
+  DIVERGING,
+  DIVERGING_MARKS,
+  SEQUENTIAL,
+  SEQUENTIAL_MARKS,
+  plotlyChrome,
+  type ThemeMode,
+} from './palette';
 import type { JsonValue, PanelData, PlotPanel } from './types';
 
 export type Trace = Record<string, unknown>;
@@ -13,8 +23,6 @@ export interface Figure {
 const WEBGL_THRESHOLD = 1500;
 /** Upper bound for text annotations (labels); more would be unreadable anyway. */
 export const MAX_ANNOTATIONS = 60;
-/** Fallback categorical colours (Plotly/D3 category10) when the spec has no palette entry. */
-const COLORWAY = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
 /** PCA `symbol` marker shapes, assigned in order of first appearance. */
 const PCA_SYMBOLS = ['circle', 'diamond', 'square', 'triangle-up', 'cross', 'x', 'star', 'triangle-down'];
 /** Generic panel-data columns; anything else (except `facet`/`sample`) is the table key used for selection. */
@@ -35,6 +43,10 @@ function isNumericColumn(rows: Row[], i: number): boolean {
     if (++seen > 50) break;
   }
   return seen > 0;
+}
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
 }
 
 function plain(v: unknown): v is Record<string, unknown> {
@@ -85,39 +97,29 @@ function scaleSizes(values: JsonValue[]): number[] {
   return values.map((v) => (typeof v === 'number' && Number.isFinite(v) ? (hi > lo ? 4 + (12 * (v - lo)) / (hi - lo) : 8) : 4));
 }
 
-/** Diverging scale for centred values (row z-scores): blue – neutral grey – red, never a hue at the midpoint. */
-const DIVERGING: [number, string][] = [
-  [0, '#2b59c3'],
-  [0.25, '#8da4dc'],
-  [0.5, '#e6e6e6'],
-  [0.75, '#e39a8a'],
-  [1, '#c0392b'],
-];
-/** Sequential single-hue scale (light → dark) for unscaled / log values. */
-const SEQUENTIAL: [number, string][] = [
-  [0, '#f2f5fb'],
-  [0.5, '#7f9fd6'],
-  [1, '#1d3f8f'],
-];
-
 function baseLayout(xTitle?: string, yTitle?: string): Record<string, unknown> {
   return {
     autosize: true,
     margin: { l: 56, r: 16, t: 12, b: 48 },
-    font: { size: 11 },
     xaxis: { title: { text: xTitle }, automargin: true, zeroline: false },
     yaxis: { title: { text: yTitle }, automargin: true, zeroline: false },
     hovermode: 'closest',
     showlegend: false,
-    colorway: COLORWAY,
   };
+}
+
+/** Puts the themed chrome (transparent background, ink, grid, colorway) under the figure, then the spec overrides. */
+function finish(panel: PlotPanel, data: Trace[], layout: Record<string, unknown>, mode: ThemeMode): Figure {
+  return applyOverrides({ data, layout: deepMerge(plotlyChrome(mode), layout) }, panel.plotly);
 }
 
 /**
  * PCA of samples: panel-data has `x` (PC1), `y` (PC2), `sample` and the samples.tsv annotation columns; the spec's
  * `color.field` names one of those annotation columns. Points carry the sample name as text and in the hover.
  */
-export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
+export function buildPcaFigure(panel: PlotPanel, data: PanelData, mode: ThemeMode = 'light'): Figure {
+  const COLORWAY = CATEGORICAL[mode];
+  const chrome = CHROME[mode];
   const cols = data.columns;
   const xi = cols.indexOf('x');
   const yi = cols.indexOf('y');
@@ -184,13 +186,13 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
     y: rs.map((r) => r[yi]),
     text: rs.map((r) => (sampleIdx >= 0 ? r[sampleIdx] : '')),
     textposition: rs.map((r) => labelPos.get(r) ?? 'top center'),
-    textfont: { size: 10, color: '#444' },
+    textfont: { size: 10, color: chrome.inkSecondary },
     customdata: rs.map((r) => [sampleIdx >= 0 ? r[sampleIdx] : '', ...annot.map(([, i]) => r[i])]),
     hovertemplate: hover,
     marker: {
       size: 10,
       opacity: 0.9,
-      line: { width: 1, color: '#fff' },
+      line: { width: 1, color: chrome.ring },
       ...(si >= 0 ? { symbol: rs.map((r) => symbolOf.get(symKey(r)) ?? 'circle') } : {}),
     },
     cliponaxis: false,
@@ -208,7 +210,7 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
     t.marker = {
       ...(t.marker as object),
       color: rows.map((r) => r[ci]),
-      colorscale: panel.color?.colorscale ?? 'Viridis',
+      colorscale: panel.color?.colorscale ?? SEQUENTIAL_MARKS[mode],
       showscale: true,
       colorbar: { title: { text: panel.color?.label || colourField }, thickness: 12 },
     };
@@ -234,7 +236,7 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
     t.name = '';
     traces.push(t);
   }
-  return applyOverrides({ data: traces, layout }, panel.plotly);
+  return finish(panel, traces, layout, mode);
 }
 
 /**
@@ -242,7 +244,9 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
  * `group_by`). Pivoted to a matrix; first row on top. Row z-scores get a diverging scale centred at 0, other scales
  * a sequential one. Sample groups are drawn as a coloured band above the columns with the group name.
  */
-export function buildHeatmapFigure(panel: PlotPanel, data: PanelData): Figure {
+export function buildHeatmapFigure(panel: PlotPanel, data: PanelData, mode: ThemeMode = 'light'): Figure {
+  const COLORWAY = CATEGORICAL[mode];
+  const chrome = CHROME[mode];
   const cols = data.columns;
   const ri = cols.indexOf('row');
   const coli = cols.indexOf('column');
@@ -276,7 +280,7 @@ export function buildHeatmapFigure(panel: PlotPanel, data: PanelData): Figure {
     x: colNames,
     y: rowNames,
     z,
-    colorscale: panel.color?.colorscale ?? (centred ? DIVERGING : SEQUENTIAL),
+    colorscale: panel.color?.colorscale ?? (centred ? DIVERGING[mode] : SEQUENTIAL[mode]),
     ...(centred ? { zmid: 0 } : {}),
     xgap: 1,
     ygap: 1,
@@ -322,7 +326,7 @@ export function buildHeatmapFigure(panel: PlotPanel, data: PanelData): Figure {
       y0: 1.01,
       y1: 1.05,
       fillcolor: colourOf.get(run.name),
-      line: { width: 1, color: '#fff' },
+      line: { width: 1, color: chrome.ring },
     }));
     layout.annotations = runs.map((run) => ({
       xref: 'x',
@@ -332,15 +336,17 @@ export function buildHeatmapFigure(panel: PlotPanel, data: PanelData): Figure {
       yanchor: 'bottom',
       text: run.name,
       showarrow: false,
-      font: { size: 10, color: '#333' },
+      font: { size: 10, color: chrome.ink },
     }));
   }
-  return applyOverrides({ data: [trace], layout }, panel.plotly);
+  return finish(panel, [trace], layout, mode);
 }
 
-export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
-  if (panel.kind === 'pca') return buildPcaFigure(panel, data);
-  if (panel.kind === 'heatmap') return buildHeatmapFigure(panel, data);
+export function buildFigure(panel: PlotPanel, data: PanelData, mode: ThemeMode = 'light'): Figure {
+  if (panel.kind === 'pca') return buildPcaFigure(panel, data, mode);
+  if (panel.kind === 'heatmap') return buildHeatmapFigure(panel, data, mode);
+  const COLORWAY = CATEGORICAL[mode];
+  const chrome = CHROME[mode];
   const cols = data.columns;
   const ix = (name: string) => cols.indexOf(name);
   const xi = ix('x');
@@ -358,7 +364,6 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
   const layout: Record<string, unknown> = {
     autosize: true,
     margin: { l: 56, r: 16, t: 12, b: 48 },
-    font: { size: 11 },
     xaxis: { title: { text: xTitle }, automargin: true, zeroline: false },
     yaxis: { title: { text: yTitle }, automargin: true, zeroline: false },
     // horizontal legend above the plot; titled only by a readable name (a raw `expr` would be noise)
@@ -372,7 +377,6 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
     },
     hovermode: 'closest',
     showlegend: false,
-    colorway: COLORWAY,
   };
 
   // --- base trace per kind (one trace; colour may split it into groups below)
@@ -406,20 +410,43 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
   const pointKinds = kind === 'scatter' || kind === 'line' || kind === 'bar';
   const hovertemplate = pointKinds ? `x: %{x}<br>y: %{y}${hoverKey}<extra>%{fullData.name}</extra>` : undefined;
 
+  // rows of each trace, in trace order (marker sizes are mapped per trace)
+  const traceRows: Row[][] = [];
+
   if (ci >= 0 && isNumericColumn(rows, ci) && (kind === 'scatter' || kind === 'line')) {
-    // continuous colour → one trace with a colour scale and colour bar
-    const t = base(rows);
+    // continuous colour → one trace with a colour scale and colour bar. Values with both signs (e.g. an editing Δ)
+    // get the diverging scale centred at 0, others the one-hue sequential scale. Rows without a value are drawn
+    // underneath in the muted grey as "no value" (Plotly would otherwise paint them near-invisible).
+    const missing = rows.filter((r) => !isFiniteNumber(r[ci]));
+    const valued = missing.length ? rows.filter((r) => isFiniteNumber(r[ci])) : rows;
+    if (missing.length) {
+      const m = base(missing);
+      m.name = 'no value';
+      m.marker = { ...((m.marker as object) ?? {}), color: chrome.muted, opacity: 0.45 };
+      if (hovertemplate) m.hovertemplate = hovertemplate;
+      traces.push(m);
+      traceRows.push(missing);
+      layout.showlegend = true;
+      layout.margin = { l: 56, r: 16, t: 28, b: 48 };
+    }
+    const values = valued.map((r) => r[ci] as number);
+    const signed = values.some((v) => v < 0) && values.some((v) => v > 0);
+    const explicit = panel.color?.colorscale;
+    const t = base(valued);
     const marker = (t.marker as Record<string, unknown>) ?? {};
     t.marker = {
       ...marker,
-      color: col(rows, ci),
-      colorscale: panel.color?.colorscale ?? 'Viridis',
+      color: values,
+      colorscale: explicit ?? (signed ? DIVERGING_MARKS[mode] : SEQUENTIAL_MARKS[mode]),
+      ...(signed && !explicit ? { cmid: 0 } : {}),
       showscale: true,
       colorbar: { title: { text: axisTitle(panel.color) }, thickness: 12 },
     };
     t.name = '';
+    t.showlegend = false;
     if (hovertemplate) t.hovertemplate = hovertemplate;
     traces.push(t);
+    traceRows.push(valued);
   } else if (ci >= 0) {
     // categorical colour → one trace per value, colours from the spec palette (case-sensitive), else the colorway
     const palette = panel.color?.palette ?? {};
@@ -432,6 +459,7 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
       t.marker = { ...((t.marker as object) ?? {}), color: colour };
       if (kind === 'line' || kind === 'violin') t.line = { color: colour };
       traces.push(t);
+      traceRows.push(rs);
     }
     layout.showlegend = true;
     layout.margin = { l: 56, r: 16, t: 28, b: 48 };
@@ -442,6 +470,7 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
     t.name = '';
     if (hovertemplate) t.hovertemplate = hovertemplate;
     traces.push(t);
+    traceRows.push(rows);
   }
 
   // size → marker size per point (scatter only; applies to whichever traces carry the points)
@@ -449,14 +478,9 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
     const sizeOf = new Map<Row, number>();
     const scaled = scaleSizes(rows.map((r) => r[si]));
     rows.forEach((r, k) => sizeOf.set(r, scaled[k]));
-    if (traces.length === 1 && (ci < 0 || isNumericColumn(rows, ci))) {
-      (traces[0].marker as Record<string, unknown>).size = scaled;
-    } else {
-      const groups = [...groupBy(rows, ci).values()];
-      traces.forEach((t, k) => {
-        (t.marker as Record<string, unknown>).size = (groups[k] ?? []).map((r) => sizeOf.get(r) ?? 6);
-      });
-    }
+    traces.forEach((t, k) => {
+      (t.marker as Record<string, unknown>).size = (traceRows[k] ?? []).map((r) => sizeOf.get(r) ?? 6);
+    });
   }
 
   // labels → annotations with arrows at the labelled points (rows with a non-null label come first)
@@ -474,19 +498,19 @@ export function buildFigure(panel: PlotPanel, data: PanelData): Figure {
         showarrow: true,
         arrowhead: 0,
         arrowwidth: 1,
-        arrowcolor: '#555',
+        arrowcolor: chrome.muted,
         // staggered offsets so labels of nearby points overlap less
         ax: annotations.length % 2 ? -20 : 20,
         ay: -18 - (annotations.length % 3) * 12,
-        font: { size: 11, color: '#111' },
-        bgcolor: 'rgba(255,255,255,0.75)',
+        font: { size: 11, color: chrome.ink },
+        bgcolor: chrome.labelBg,
         borderpad: 1,
       });
     }
     if (annotations.length) layout.annotations = annotations;
   }
 
-  return applyOverrides({ data: traces, layout }, panel.plotly);
+  return finish(panel, traces, layout, mode);
 }
 
 /** Plot kinds whose points carry the table key (`customdata`) and so take part in linked selection. */
@@ -494,14 +518,14 @@ export function isSelectablePlot(panel: PlotPanel): boolean {
   return panel.kind === 'scatter' || panel.kind === 'line' || panel.kind === 'bar' || panel.kind === 'heatmap';
 }
 
-const SELECTED_RING = { size: 13, color: 'rgba(0,0,0,0)', line: { width: 2, color: '#111' } };
+const selectedRing = (mode: ThemeMode) => ({ size: 13, color: 'rgba(0,0,0,0)', line: { width: 2, color: CHROME[mode].selected } });
 
 /**
  * Linked selection (T17e): returns a copy of `fig` with the selected keys highlighted. Point traces keep the
  * selected points opaque and fade the rest (Plotly `selectedpoints`), scatter/line points also get a dark ring;
  * heatmaps outline the selected rows and bold their labels. No selection → the figure is returned unchanged.
  */
-export function highlightSelection(panel: PlotPanel, fig: Figure, selected: ReadonlySet<string>): Figure {
+export function highlightSelection(panel: PlotPanel, fig: Figure, selected: ReadonlySet<string>, mode: ThemeMode = 'light'): Figure {
   if (!selected.size || !isSelectablePlot(panel)) return fig;
 
   if (panel.kind === 'heatmap') {
@@ -520,7 +544,7 @@ export function highlightSelection(panel: PlotPanel, fig: Figure, selected: Read
         x1: 1,
         y0: k - 0.5,
         y1: k + 0.5,
-        line: { width: 2, color: '#111' },
+        line: { width: 2, color: CHROME[mode].selected },
         fillcolor: 'rgba(0,0,0,0)',
       })),
     ];
@@ -555,7 +579,7 @@ export function highlightSelection(panel: PlotPanel, fig: Figure, selected: Read
         mode: 'markers',
         x: idx.map((i) => xs?.[i] ?? null),
         y: idx.map((i) => ys?.[i] ?? null),
-        marker: SELECTED_RING,
+        marker: selectedRing(mode),
         hoverinfo: 'skip',
         showlegend: false,
         name: 'selected',

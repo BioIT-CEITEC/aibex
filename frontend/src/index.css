@@ -3,8 +3,13 @@
 /* shadcn/ui theme tokens (neutral base). Dark mode via a `.dark` class on <html> (T53). */
 @custom-variant dark (&:is(.dark *));
 
+/* T53: light/dark come from the spec (`theme.dark`), see components/ThemeToggle.tsx; chart colours in lib/palette.ts.
+   `--highlight` marks the linked selection (table rows, selection chip) in both themes. */
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
+  --highlight: oklch(0.962 0.059 95.617);
+  --highlight-strong: oklch(0.924 0.12 95.746);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -24,6 +29,9 @@
 }
 
 .dark {
+  color-scheme: dark;
+  --highlight: oklch(0.38 0.08 80);
+  --highlight-strong: oklch(0.45 0.1 80);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -62,6 +70,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-highlight: var(--highlight);
+  --color-highlight-strong: var(--highlight-strong);
 }
 
 @layer base {

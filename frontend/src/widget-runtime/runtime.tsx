@@ -111,6 +111,46 @@ class Boundary extends Component<{ children?: ReactNode; resetKey: unknown }, { 
   }
 }
 
+// Theme (T53): the parent sends themed Plotly defaults; every Plotly.newPlot/react/plot call from widget code gets them
+// underneath its own layout, so a widget that sets its own colours keeps them and one that does not matches the theme.
+let plotlyDefaults: Record<string, unknown> = {};
+
+function isPlain(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function underlay(base: Record<string, unknown>, over: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(over)) out[k] = isPlain(v) && isPlain(out[k]) ? underlay(out[k] as Record<string, unknown>, v) : v;
+  return out;
+}
+
+function themePlotly() {
+  const plotly = w.Plotly as Record<string, unknown> | undefined;
+  if (!plotly || plotly.__aibexThemed) return;
+  for (const name of ['newPlot', 'react', 'plot']) {
+    const original = plotly[name];
+    if (typeof original !== 'function') continue;
+    plotly[name] = function (this: unknown, gd: unknown, data: unknown, layout: unknown, ...rest: unknown[]) {
+      // the figure form `Plotly.newPlot(gd, {data, layout, config})` is left alone apart from its layout
+      if (isPlain(data) && !Array.isArray(data)) {
+        const fig = data as Record<string, unknown>;
+        const lay = isPlain(fig.layout) ? fig.layout : {};
+        return original.call(this, gd, { ...fig, layout: underlay(plotlyDefaults, lay) }, layout, ...rest);
+      }
+      return original.call(this, gd, data, underlay(plotlyDefaults, isPlain(layout) ? layout : {}), ...rest);
+    };
+  }
+  plotly.__aibexThemed = true;
+}
+
+function applyTheme(theme: RenderMessage['theme']) {
+  const mode = theme?.mode === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = mode;
+  plotlyDefaults = theme && isPlain(theme.plotly) ? theme.plotly : {};
+  themePlotly();
+}
+
 let root: Root | null = null;
 let cached: { code: string; widget: ComponentType<WidgetProps> | null; error: string | null } | null = null;
 
@@ -120,6 +160,7 @@ const onSelect = (keys: unknown[]) => {
 };
 
 function render(message: RenderMessage) {
+  applyTheme(message.theme);
   if (!cached || cached.code !== message.code) {
     try {
       cached = { code: message.code, widget: loadWidget(message.code), error: null };
@@ -148,6 +189,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     code: m.code,
     data: m.data ?? { inputs: {} },
     selection: Array.isArray(m.selection) ? m.selection : [],
+    theme: m.theme,
   });
 });
 

@@ -281,7 +281,9 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   (CSP meta + `plotly.js-basic-dist-min` + runtime, loaded lazily so the ~1.4 MB chunk is fetched only when a spec has
   a widget), `protocol.ts`. Messages carry `aibex: 1`; both sides check the *source* window (the frame's origin is
   opaque, so the parent posts with `'*'`). Parent → frame `{type: "render", code, data, selection}` (`data` = the
-  widget's `panel-data` response `{inputs: {...}}`, `selection` = linked selection keys). Frame → parent `ready`,
+  widget's `panel-data` response `{inputs: {...}}`, `selection` = linked selection keys, optional
+  `theme: {mode: light|dark, plotly: {...}}` (T53): the frame sets `<html data-theme>` and lays the themed Plotly
+  defaults *under* the layout of every `Plotly.newPlot/react/plot` call, so colours a widget sets itself win). Frame → parent `ready`,
   `rendered`, `select {keys}` (→ store selection, view state, no version), `error {phase: load|render, message}`
   (shown in the panel as `widget-error-<id>` and inside the frame). The runtime evaluates CommonJS-style JS
   (`exports.default = Widget`; `require` only for react/react-dom/plotly) through an inline `<script>` element – the
