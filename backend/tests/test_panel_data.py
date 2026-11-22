@@ -110,6 +110,23 @@ def test_histogram_x_only_with_size_and_facet(bundle):
     assert len(d["rows"]) == 300
 
 
+def test_plot_carries_selection_key_of_linked_table(bundle):
+    # editing sites (key site_id) take part in a gene_id selection: gene_id comes before the table key
+    p = {"id": "sites-plot", "type": "plot", "table": "editing", "kind": "scatter",
+         "x": {"field": "edit_wt"}, "y": {"field": "edit_ko"}}
+    raw = dict(_spec([p, VOLCANO]), selection={"key": "gene_id", "linked": True})
+    spec, errors = validate_spec(raw, bundle)
+    assert not errors, errors
+    d = panel_data(spec, bundle, "sites-plot")
+    assert d["columns"] == ["x", "y", "gene_id", "site_id"]
+    (n_join,) = _q(bundle, "SELECT count(*) FROM editing e JOIN de d ON e.gene_id = d.gene_id")[0]
+    assert sum(g is not None for g in _col(d, "gene_id")) == n_join
+    # the key column of the selection's own table is not repeated; no selection / not linked → table key only
+    assert panel_data(spec, bundle, "volcano")["columns"] == ["x", "y", "color", "label", "gene_id"]
+    unlinked, _ = validate_spec(dict(raw, selection={"key": "gene_id", "linked": False}), bundle)
+    assert panel_data(unlinked, bundle, "sites-plot")["columns"] == ["x", "y", "site_id"]
+
+
 def test_cap_truncates_and_keeps_labelled_rows(bundle, monkeypatch):
     monkeypatch.setattr(pd_mod, "MAX_ROWS", 50)
     p = dict(VOLCANO, label={"field": "gene_name", "values": ["Gene_199"]})

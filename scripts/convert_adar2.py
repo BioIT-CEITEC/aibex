@@ -25,12 +25,15 @@ Usage:
     uv run scripts/convert_adar2.py                     # raw + out derived from $AIBEX_DATA_DIR (or ./data)
     uv run scripts/convert_adar2.py --raw RAW --out OUT [--min-cov 10]
 
-Output (docs/bundle-format.md): bundle.yaml, samples.tsv, tables/{de,counts,editing,editing_levels}.parquet
+Output (docs/bundle-format.md): bundle.yaml, samples.tsv, tables/{de,counts,editing,editing_levels}.parquet,
+views/default.json (the starting view combining expression and editing; the backend validates it and falls back to a
+generated view if it is invalid)
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -263,6 +266,7 @@ def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dic
         "modalities": ["rna-seq", "rna-editing"],
         "contrast": {"name": "ADAR_vs_WT", "numerator": NUM, "denominator": DEN},
         "samples": "samples.tsv",
+        "default_view": DEFAULT_VIEW_FILE,
         "tables": {
             "de": {
                 "file": "tables/de.parquet",
@@ -324,6 +328,8 @@ def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dic
                     "delta": {**f, "description": "editing change edit_adar - edit_wt (ADAR vs WT)"},
                     "high_confidence": {**b, "description": f"more than {HIGH_CONFIDENCE_MIN_EDITED} edited reads over all samples"},
                     "n_samples_covered": {**i, "description": f"samples with coverage > 0 (of {n_samples})"},
+                    "gene_log2fc": {**f, "description": "log2FoldChange of the site's gene (copied from de)"},
+                    "gene_padj": {**f, "description": "padj of the site's gene (copied from de)"},
                 },
             },
             "editing_levels": {
@@ -338,6 +344,74 @@ def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dic
             {"from": "counts.gene_id", "to": "de.gene_id"},
             {"from": "editing_levels.site_id", "to": "editing.site_id"},
         ],
+    }
+
+
+# ----------------------------------------------------------------------------------------------------- default view
+DEFAULT_VIEW_FILE = "views/default.json"
+
+
+def default_view() -> dict:
+    """Starting view (docs/spec-format.md) combining expression and editing, linked by gene_id.
+
+    Lives in the bundle, not in the app: only the converter knows these column names. The volcano stays the first
+    plot with an empty `label` (demo prompts 1 and 4 address it). No heatmap: demo prompt 3 adds one.
+    """
+    sig = "CASE WHEN padj < 0.05 AND abs(log2FoldChange) > 1 THEN 'significant' ELSE 'n.s.' END"
+    gene_de = "CASE WHEN gene_padj < 0.05 THEN 'gene DE (padj < 0.05)' ELSE 'gene not DE' END"
+    confident = f"CASE WHEN high_confidence = TRUE THEN '> {HIGH_CONFIDENCE_MIN_EDITED} edited reads' ELSE 'other' END"
+    grey = "#bbbbbb"
+    diagonal = {"type": "line", "xref": "x", "yref": "y", "x0": 0, "y0": 0, "x1": 1, "y1": 1,
+                "line": {"dash": "dot", "color": "#888888", "width": 1}}
+    panels = [
+        {"id": "volcano", "type": "plot", "title": "Volcano: ADAR vs WT (expression)", "table": "de", "kind": "scatter",
+         "x": {"field": "log2FoldChange", "label": "log2 fold change (ADAR vs WT)"},
+         "y": {"expr": "-log10(padj)", "label": "-log10 padj"},
+         "color": {"expr": sig, "palette": {"significant": "#d62728", "n.s.": grey}},
+         "label": {"field": "gene_name", "values": []}},
+        {"id": "editing-vs-expression", "type": "plot", "title": "Editing change vs expression change (per site)",
+         "description": "Each point is an editing site; x = log2 fold change of its gene, y = editing change "
+                        "ADAR − WT (pooled levels).",
+         "table": "editing", "kind": "scatter",
+         "x": {"field": "gene_log2fc", "label": "log2 fold change of the gene"},
+         "y": {"field": "delta", "label": "editing Δ (ADAR − WT)"},
+         "color": {"expr": gene_de, "palette": {"gene DE (padj < 0.05)": "#d62728", "gene not DE": grey}},
+         "label": {"field": "gene_name", "values": []},
+         "plotly": {"layout": {"yaxis": {"zeroline": True}, "xaxis": {"zeroline": True}}}},
+        {"id": "editing-levels", "type": "plot", "title": "Editing level per site: WT vs ADAR",
+         "description": "Pooled editing level per site; points below the diagonal are less edited in ADAR.",
+         "table": "editing", "kind": "scatter",
+         "x": {"field": "edit_wt", "label": "editing level WT"},
+         "y": {"field": "edit_adar", "label": "editing level ADAR"},
+         "color": {"expr": confident, "palette": {f"> {HIGH_CONFIDENCE_MIN_EDITED} edited reads": "#1f77b4",
+                                                  "other": grey}},
+         "plotly": {"layout": {"shapes": [diagonal]}}},
+        {"id": "pca", "type": "plot", "kind": "pca", "title": "PCA of samples (normalised counts)", "table": "counts",
+         "top_n": 500, "scale": "log1p", "color": {"field": "genotype"}},
+        {"id": "edited-genes", "type": "table", "title": "Genes by number of editing sites", "table": "de",
+         "columns": ["gene_name", "n_edit_sites", "mean_delta", "max_abs_delta", "edit_wt", "edit_adar",
+                     "log2FoldChange", "padj", "baseMean", "gene_id"],
+         "sort": [{"field": "n_edit_sites", "dir": "desc"}], "page_size": 15},
+        {"id": "editing-sites", "type": "table", "title": "Editing sites (strongest loss in ADAR first)",
+         "table": "editing",
+         "columns": ["site_id", "gene_name", "exon_number", "region", "edit_wt", "edit_adar", "delta", "cov_wt",
+                     "cov_adar", "high_confidence", "gene_log2fc", "gene_padj", "gene_id"],
+         "sort": [{"field": "delta", "dir": "asc"}], "page_size": 15},
+    ]
+    rows = [("volcano", "editing-vs-expression"), ("editing-levels", "pca"), ("edited-genes",), ("editing-sites",)]
+    layout = []
+    for r, ids in enumerate(rows):
+        w = 12 // len(ids)
+        layout += [{"i": pid, "x": k * w, "y": r * 9, "w": w, "h": 9} for k, pid in enumerate(ids)]
+    return {
+        "version": 1,
+        "title": "ADAR2: expression and RNA editing (ADAR vs WT)",
+        "bundle": "adar2-editing",
+        "theme": {"palette": "default", "dark": False},
+        "filters": [],
+        "panels": panels,
+        "layout": layout,
+        "selection": {"key": "gene_id", "linked": True},
     }
 
 
@@ -363,6 +437,11 @@ def main() -> None:
     levels = levels.select("site_id", *[s for s in names if s in levels.columns])
 
     de = de.join(gene_editing(editing), on="gene_id", how="left").with_columns(pl.col("n_edit_sites").fill_null(0))
+    # expression change of the site's gene, so per-site plots can show editing vs expression without a join
+    editing = editing.join(
+        de.select("gene_id", pl.col("log2FoldChange").alias("gene_log2fc"), pl.col("padj").alias("gene_padj")),
+        on="gene_id", how="left",
+    )
     assert de["gene_id"].is_unique().all() and editing["site_id"].is_unique().all()
     assert editing["gene_id"].is_in(de["gene_id"].implode()).all(), "every site must link to a DE gene"
 
@@ -372,6 +451,8 @@ def main() -> None:
     editing.write_parquet(out / "tables" / "editing.parquet")
     levels.write_parquet(out / "tables" / "editing_levels.parquet")
     samples.write_csv(out / "samples.tsv", separator="\t")
+    (out / "views").mkdir(exist_ok=True)
+    (out / DEFAULT_VIEW_FILE).write_text(json.dumps(default_view(), indent=2, ensure_ascii=False) + "\n")
     with open(out / "bundle.yaml", "w") as fh:
         yaml.safe_dump(bundle_yaml(de.height, editing.height, len(names), args.min_cov), fh, sort_keys=False, allow_unicode=True)
 

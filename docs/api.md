@@ -163,6 +163,9 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
 - Implementation details (`aibex/panel_data.py`): plot `label` holds the label text for rows to be labelled
   (`values` matched case-insensitively, or the `top_n` rows ascending by `by` among the filtered rows), else null;
   labelled rows come first so the 5000-row cap never drops them; `facet` is returned as column `facet` when set.
+  Plot panels on a table that has the spec's `selection.key` as a non-key column (e.g. `gene_id` on editing sites, key
+  `site_id`) also return that column, placed before the table key, so their points take part in the linked selection
+  (T32; only when `selection.linked`).
   Table panels append the table key column at the end when it is not listed (needed for linked selection); rows are
   ordered by the key after the spec's `sort`. `text` panels return empty data. `pca`/`heatmap`
   (`aibex/matrix_panels.py`): filters reach the matrix rows like any panel; PCA drops rows with a missing value, scales,

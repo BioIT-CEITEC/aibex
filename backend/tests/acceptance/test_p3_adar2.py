@@ -63,6 +63,20 @@ def test_default_view_combines_modalities(real_client):
     tables = {p.get("table") for p in spec["panels"]}
     assert len(tables - {None}) >= 2, "default view should show both expression and editing"
     assert real_client.post("/api/validate-spec", json=spec).json()["valid"] is True
+    # T32: both modalities as panels (not just de + counts of the generic view), linked by the gene key, and every
+    # editing plot carries that key so its points take part in the linked selection
+    editing = {"editing"}
+    assert {"de", *editing} <= tables, f"expected expression and editing panels, got {sorted(tables - {None})}"
+    key = spec["selection"]["key"]
+    assert spec["selection"]["linked"] is True
+    sid = real_client.post("/api/sessions", json={"bundle": "adar2-editing"}).json()["session_id"]
+    for p in spec["panels"]:
+        r = real_client.post(f"/api/sessions/{sid}/panel-data", json={"panel_id": p["id"]})
+        assert r.status_code == 200, (p["id"], r.text)
+        d = r.json()
+        assert d["rows"], f"panel {p['id']} has no data"
+        if p.get("table") in editing and p["type"] == "plot":
+            assert key in d["columns"] and not d["truncated"], (p["id"], d["columns"])
 
 
 def test_raw_data_not_in_repo():

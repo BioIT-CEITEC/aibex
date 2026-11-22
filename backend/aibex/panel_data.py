@@ -4,7 +4,8 @@ Every SQL string here is built from validated parts only: identifiers come from 
 quoted, `expr`s are compiled by aibex/expr.py (the raw string never runs) and filter values are bound parameters.
 
 - `plot` panels (scatter/line/bar/box/violin/histogram): columns `x`, `y` (when defined), `color`, `size`, `label`,
-  `facet` when set, plus the table key column (named as in the bundle). `label` holds the label text for rows to be
+  `facet` when set, plus the table key column (named as in the bundle) – preceded by the spec's `selection.key` column
+  when the table has it as a non-key column. `label` holds the label text for rows to be
   labelled (explicit `values`, matched case-insensitively, or the `top_n` rows ascending by `by`), else NULL.
   Labelled rows come first so the 5000-row cap never drops them.
 - `table` panels: the listed columns (all when omitted) in order, plus the key column at the end when not listed;
@@ -114,8 +115,14 @@ def _encoding_sql(bundle: Bundle, table: str, enc: Any) -> str:
     return q(enc.field) if enc.field is not None else f"({_expr_sql(bundle, table, enc.expr)})"
 
 
-def _plot_select(p: PlotPanel, bundle: Bundle, key: str | None) -> tuple[list[str], list[str], list, str]:
-    """(select expressions, output column names, params, ORDER BY) for a simple plot."""
+def _plot_select(
+    p: PlotPanel, bundle: Bundle, key: str | None, sel_key: str | None = None
+) -> tuple[list[str], list[str], list, str]:
+    """(select expressions, output column names, params, ORDER BY) for a simple plot.
+
+    `sel_key`: the spec's linked-selection key when the panel's table has it as a non-key column (e.g. `gene_id` on a
+    table of editing sites). It comes before the table key, so the frontend uses it as the point key and the points
+    take part in the selection."""
     exprs: list[str] = []
     names: list[str] = []
     params: list = []
@@ -141,6 +148,9 @@ def _plot_select(p: PlotPanel, bundle: Bundle, key: str | None) -> tuple[list[st
     if p.facet is not None:
         exprs.append(q(p.facet))
         names.append("facet")
+    if sel_key is not None and sel_key != key and sel_key not in names:
+        exprs.append(q(sel_key))
+        names.append(sel_key)
     if key is not None and key not in names:
         exprs.append(q(key))
         names.append(key)
@@ -181,7 +191,9 @@ def panel_data(spec: Spec, bundle: Bundle, panel_id: str) -> dict:
 
     key = bundle.tables[panel.table].get("key")
     if isinstance(panel, PlotPanel):
-        exprs, names, params, order = _plot_select(panel, bundle, key)
+        sel = spec.selection
+        sel_key = sel.key if sel is not None and sel.linked and sel.key in _columns(bundle, panel.table) else None
+        exprs, names, params, order = _plot_select(panel, bundle, key, sel_key)
     else:
         exprs, names, order = _table_select(panel, bundle, key)
         params = []

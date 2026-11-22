@@ -158,6 +158,20 @@ ADAR2-deficient). Details beyond the plan:
   are.
 - `samples.tsv` order: WT then ADAR, each by group and sample. Column order of `counts`/`editing_levels` follows it.
 
+## 6b. Default view (T32)
+The converter also writes `views/default.json` (named by `default_view` in `bundle.yaml`; the backend uses it only if
+it validates, else it serves the generated view). Dataset column names stay in the converter, not in the app.
+Panels: `volcano` (de, first plot, empty `label` for demo prompts 1/4), `editing-vs-expression` (per site: gene
+log2FC vs editing Δ, coloured by gene DE), `editing-levels` (per site: editing WT vs ADAR with a diagonal, coloured by
+`high_confidence`), `pca` (counts, by genotype), `edited-genes` (de sorted by `n_edit_sites` = sites per gene),
+`editing-sites` (sorted by `delta`, strongest loss first). No heatmap on purpose (demo prompt 3 adds one).
+`selection: gene_id, linked` – the editing plots return `gene_id` too (docs/api.md, panel data), so selecting a gene in
+any panel highlights its sites. To draw per-site plots without a join, `editing` carries `gene_log2fc` and `gene_padj`
+(copied from `de`).
+Visual check on the real data (opt-in e2e, data stay outside the repo):
+`make e2e E2E_REAL_DATA=<AIBEX_DATA_DIR>` runs only `frontend/e2e/real-*.spec.ts` and writes
+`logs/screens/T32-adar2-*.png`.
+
 ## 7. Questions for Vojta (T33)
 - **Q-a** Meaning of `ADAR` vs `WT` (ADAR2 knockout / deficient?) and the wording for the UI.
 - **Q-b** Meaning of the `PER` / `PL` groups; should views or the contrast account for them?
