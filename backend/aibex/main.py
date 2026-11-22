@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Body, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -17,6 +17,7 @@ from aibex import __version__
 from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
 from aibex.default_view import default_view
+from aibex.llm.chat import chat_events, run_chat, sse_frame
 from aibex.llm.provider import provider_from_settings
 from aibex.panel_data import PanelDataUnsupported, PanelNotFound, panel_data
 from aibex.query import QueryError, run_query
@@ -42,6 +43,10 @@ class PatchRequest(BaseModel):
 class PanelDataRequest(BaseModel):
     panel_id: str
     selection: list[Any] | None = None  # used by widget inputs ($selected, T40a); plot/table panels ignore it
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=8000)
 
 
 class StepsRequest(BaseModel):
@@ -134,6 +139,20 @@ def _api_router() -> APIRouter:
     @router.post("/sessions/{sid}/redo")
     def redo_session(sid: str, request: Request, body: StepsRequest | None = None) -> dict:
         return _move(request, sid, "redo", (body or StepsRequest()).steps)
+
+    @router.post("/sessions/{sid}/chat")
+    def chat_session(sid: str, body: ChatRequest, request: Request, stream: bool = True) -> Any:
+        """Chat loop (docs/api.md): SSE stream by default; `?stream=false` → `{reply, spec, version, events}`."""
+        s = get_session(request, sid)
+        provider = request.app.state.llm_provider
+        if stream:
+            frames = (sse_frame(e) for e in chat_events(s, provider, body.message))
+            return StreamingResponse(
+                frames, media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+            )
+        result = run_chat(s, provider, body.message)
+        with s.lock:
+            return {"reply": result.reply, "spec": s.spec, "version": s.version, "events": result.events}
 
     @router.post("/sessions/{sid}/panel-data")
     def session_panel_data(sid: str, body: PanelDataRequest, request: Request) -> dict:

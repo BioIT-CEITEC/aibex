@@ -50,6 +50,7 @@ class Session:
     _pos: int = 0
     version: int = 0
     history: list[dict] = field(default_factory=list)
+    chat: list[dict] = field(default_factory=list)  # chat transcript {role: user|assistant, content} (chat loop)
     lock: threading.RLock = field(default_factory=threading.RLock, repr=False)
 
     @property

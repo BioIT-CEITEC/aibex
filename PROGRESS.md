@@ -37,7 +37,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
 - [x] T21b `FakeProvider` rules per docs/api.md + unit tests; provider selection in `create_app` (after: T21a)
 - [x] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
-- [ ] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
+- [x] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
 - [ ] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
 - [ ] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
 - [ ] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
@@ -70,6 +70,17 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T22b · done · `aibex/llm/chat.py`: `chat_events` generator (always ends with `done`, never raises),
+  `run_chat` (non-stream), `sse_frame`; `POST /sessions/{sid}/chat` (`?stream=false` → `{reply, spec, version,
+  events}`; default already streams SSE via `StreamingResponse`, so A2.4 passes too – T23 still owns the real system
+  prompt and any token streaming/frontend-facing tuning). Context per call = one system message (short placeholder
+  prompt + fenced JSON `{schema, spec, panel_index}` rebuilt from the current spec) + last 6 chat messages
+  (`Session.chat`, new field) + this turn in OpenAI format; text fallback on every response. Rules: 8 calls max
+  (changes already applied stay, undoable), 2 rejected update_view/create_widget in a row stop (an applied change
+  resets the count; also two in one response), provider errors → `error` event. Message 1–8000 chars (422).
+  docs/api.md implementation note. Tests `tests/test_chat.py` (17, incl. FakeProvider end-to-end + endpoint).
+  Checks: `make test` 387 pass + lint clean; phase-1 acceptance 34 pass; phase-2 16/16 pass. `ruff format --check`
+  was refused by the runner permissions (ruff check passes). No new dependencies. No UI.
 - 2026-11-22 · T22a · done · `aibex/llm/tools.py`: `TOOL_SCHEMAS` (OpenAI function defs for describe_bundle,
   query_data, update_view, undo_view; create_widget comes in T40b and returns an error until then), plain functions
   and `run_tool(session, name, args) -> ToolOutcome` (result dict, `changed`, `failed_change`, `summary`, `content()`

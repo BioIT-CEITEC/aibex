@@ -84,6 +84,17 @@ class LLMProvider(Protocol):
   + ≤10 most frequent `examples`, cut at 80 chars), `matrix: true` on genes × samples tables, and `samples`
   (`n`, ≤10 distinct values per samples.tsv column). `query_data` adds `note` when truncated. `update_view` accepts a
   double-encoded patch string or a single op object; an empty summary falls back to the op list.
+- Implementation (T22b, `aibex/llm/chat.py`): `chat_events(session, provider, message)` yields event dicts and always
+  ends with `done`; `run_chat` collects them (non-stream response), `sse_frame` formats them. Each provider call gets
+  one `system` message = system prompt + a fenced ```` ```json ```` block `{"schema", "spec", "panel_index"}` rebuilt
+  from the *current* spec (so it is fresh after a change), then the last 6 chat messages of the session
+  (`Session.chat`, plain user/assistant text), then this turn (user message, assistant `tool_calls` messages in OpenAI
+  format, tool results). `with_text_fallback` is applied to every response. Event order per tool call: `tool`
+  `{status: "running"}`, `tool` `{status: "ok"|"error"}`, then `spec` if it applied a change; the final text is one
+  `token` event. "2 failures in a row": an applied change resets the count; failed `query_data`/`describe_bundle`/
+  `undo_view` neither count nor reset; two rejected calls in one response also stop. At the step limit, changes
+  applied earlier in the turn are kept (undoable). Provider errors (`LLMError` or any exception) → `error` event.
+  `message` must be 1–8000 characters (else 422).
 
 ## REST endpoints (all JSON, prefix `/api`)
 | method | path | body | response |
