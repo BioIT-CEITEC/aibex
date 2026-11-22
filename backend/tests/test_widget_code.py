@@ -247,6 +247,37 @@ def test_chat_loop_routes_widget_code_to_code_model(session):
     assert session.spec["panels"][-1]["code"] == CODE
 
 
+class DeadCodeModel(ScriptedProvider):
+    """Like ScriptedProvider, but every call without tools (code writing) times out; the chat model would retry."""
+
+    def chat(self, messages, tools, model=None):
+        if not tools:
+            self.calls.append({"model": model, "tools": []})
+            raise LLMError("LLM request failed (APITimeoutError): Request timed out.")
+        self.calls.append({"model": model, "tools": [t["function"]["name"] for t in tools]})
+        args = {"id": "site-count", "title": "Sites", "inputs": INPUTS, "description": DESC}
+        return LLMResponse(tool_calls=[ToolCall(id=f"c{len(self.calls)}", name="create_widget", arguments=args)])
+
+
+def test_unreachable_code_model_stops_the_loop_after_one_attempt(session):
+    p = DeadCodeModel()
+    out = run_chat(session, p, "show the editing sites of the selected gene", model="agentic", code_model="coder")
+    # one chat call, then coder + fallback (agentic, no tools) both time out → stop, no second create_widget
+    assert [c["model"] for c in p.calls] == ["agentic", "coder", "agentic"]
+    assert session.version == 0 and "could not be written" in out.reply and "timed out" in out.reply
+
+
+def test_unreachable_flag_only_for_provider_failures(bundle):
+    w = make_code_writer(bundle, RecordingProvider(exc=LLMError("timeout")), "coder")
+    with pytest.raises(WidgetCodeError) as info:
+        w(DESC, INPUTS, None, None)
+    assert info.value.unreachable
+    w = make_code_writer(bundle, RecordingProvider(text="no code here"), "coder")
+    with pytest.raises(WidgetCodeError) as info:
+        w(DESC, INPUTS, None, None)
+    assert not info.value.unreachable
+
+
 def test_chat_endpoint_passes_llm_model_code(tmp_path):
     from fastapi.testclient import TestClient
 

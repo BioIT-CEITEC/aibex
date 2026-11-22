@@ -44,7 +44,14 @@ crash on nulls or missing columns."""
 
 
 class WidgetCodeError(Exception):
-    """The code model failed or returned no usable code; the message goes back to the chat model."""
+    """The code model failed or returned no usable code; the message goes back to the chat model.
+
+    `unreachable` = no model answered (time-out, network): a retry would only double the wait, so the chat loop stops.
+    """
+
+    def __init__(self, message: str, unreachable: bool = False):
+        super().__init__(message)
+        self.unreachable = unreachable
 
 
 def input_columns(bundle: Bundle, sql: str) -> list[tuple[str, str]]:
@@ -126,11 +133,13 @@ def make_code_writer(
         except Exception as exc:  # noqa: BLE001 – LLMError or a broken provider
             first = f"the code model could not be reached: {str(exc)[:200]}"
             if model is None or model == fallback_model:
-                raise WidgetCodeError(first) from None
+                raise WidgetCodeError(first, unreachable=True) from None
             try:
                 response = provider.chat(messages, [], model=fallback_model)
             except Exception as exc2:  # noqa: BLE001
-                raise WidgetCodeError(f"{first}; the chat model also failed: {str(exc2)[:200]}") from None
+                raise WidgetCodeError(
+                    f"{first}; the chat model also failed: {str(exc2)[:200]}", unreachable=True
+                ) from None
             write.used_fallback = True  # type: ignore[attr-defined]
         return extract_code(response.text)
 

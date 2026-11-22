@@ -91,8 +91,10 @@ class LLMProvider(Protocol):
   explicit `code` wins (FakeProvider still passes code). `chat_events`/`run_chat` take `code_model`; `/chat` passes
   `settings.llm_model_code`. The code-model call is bounded: 90 s, no retry (`OpenAICompatibleProvider.with_timeout`);
   when it fails or times out, the chat model writes the code from the same messages and the result says
-  `"code_by": "chat model (the code model failed)"`. Only when both fail is the `create_widget` rejected (counts as a
-  failed attempt).
+  `"code_by": "chat model (the code model failed)"`. Only when both fail (time-out/network) is the `create_widget`
+  rejected, and then the chat loop stops at once with an `error` event ("The widget could not be written: …"; nothing
+  changed) instead of letting the chat model retry, which would double the wait. A code answer without a component
+  (no `export default`) is an ordinary failed attempt.
 - Implementation (T22a, `aibex/llm/tools.py`): `TOOL_SCHEMAS` (OpenAI function definitions), plain functions `describe_bundle(bundle)`, `query_data(bundle, sql)`,
   `update_view(session, patch, summary)`, `undo_view(session, steps)` and the dispatcher
   `run_tool(session, name, arguments) -> ToolOutcome(name, result, changed, failed_change, summary)`; `content()` is

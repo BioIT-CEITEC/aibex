@@ -164,6 +164,7 @@ class ToolOutcome:
     changed: bool = False  # a new spec version was applied
     failed_change: bool = False  # a rejected update_view/create_widget (counts towards "2 failures in a row")
     summary: str = ""  # history summary of an applied change
+    stop: bool = False  # end the chat turn now (no model wrote the widget code; a retry would double the wait)
 
     def content(self) -> str:
         return json.dumps(self.result, ensure_ascii=False, default=str)
@@ -393,7 +394,7 @@ def create_widget(
             try:
                 code = code_writer(description, inputs, previous.get("code") if previous else None, rejected)
             except WidgetCodeError as exc:
-                return ToolOutcome("create_widget", _err(str(exc)), failed_change=True)
+                return ToolOutcome("create_widget", _err(str(exc)), failed_change=True, stop=exc.unreachable)
         panel: dict[str, Any] = {"id": pid, "type": "widget", "title": (title or "").strip(), "inputs": inputs,
                                  "code": code, "language": language or "tsx"}
         planned = _widget_patch(session.spec, panel)

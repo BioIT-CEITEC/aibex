@@ -11,6 +11,8 @@ Rules:
 - max 8 provider calls per message (then `error` "step limit");
 - a rejected `update_view`/`create_widget` sends the errors back as the tool result; 2 rejected attempts in a row
   (an applied change resets the count) stop the loop with an `error` event and no further provider call;
+- a `create_widget` whose code no model could write (time-out/network, `ToolOutcome.stop`) stops the loop at once
+  with an `error` event (T42: a retry would double a multi-minute wait);
 - provider failures (`LLMError` or anything else) become an `error` event; the loop never raises.
 """
 
@@ -120,6 +122,11 @@ def _loop(
             turn.append({"role": "tool", "tool_call_id": call.id, "content": outcome.content()})
             ok = outcome.result.get("ok", True) is not False
             yield {"type": "tool", "name": call.name, "status": "ok" if ok else "error"}
+            if outcome.stop:
+                errors = "; ".join(str(e) for e in outcome.result.get("errors", []))[:500]
+                state["reply"] = f"The widget could not be written: {errors}. Nothing was changed; try again later."
+                yield {"type": "error", "message": state["reply"]}
+                return
             if outcome.changed:
                 failed = 0
                 yield {"type": "spec", "spec": session.spec, "version": session.version, "summary": outcome.summary}

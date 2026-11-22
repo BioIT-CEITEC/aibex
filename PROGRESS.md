@@ -71,6 +71,22 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T42 · **still partial `[~]`** · Added the fix proposed last time: when no model could write the widget
+  code (time-out/network: `WidgetCodeError.unreachable`), `create_widget` returns `ToolOutcome.stop` and the chat loop
+  ends at once with an `error` event ("The widget could not be written: …; nothing was changed") instead of letting
+  the chat model retry `create_widget`. A code answer without `export default` is still an ordinary failed attempt
+  (sent back to the chat model). docs/api.md (T42 note) and the chat.py docstring updated. New tests in
+  `tests/test_widget_code.py` (+2). **Live run (1 of 3 allowed; `make accept-live` itself was refused by the
+  permission list, so I ran the same `uv run pytest -q tests/acceptance -m live -k widget_editing -s` in `backend/`):
+  failed again on the service time-out.** The chat model `agentic` planned well (3 `query_data`, then `create_widget`
+  with a description). Then `coder` timed out at 90 s, and the fallback `agentic` without tools also timed out
+  (120 s ×2 with the provider retry). The turn now stops after **356 s** (it was 691 s before this fix). I did not
+  use the other two live runs: the service gives the same result. **Remaining:** (1) Q12 is still open for Vojta:
+  which code model, and what time limit for a live widget in the demo? Possible next steps: try another code-model
+  alias, give the fallback call the same 90 s bound with no retry (worst case then about 3 min plus the planning
+  calls), or for the demo, pre-generate the widget offline and load it as a saved view (T51). (2) Re-run the live test
+  when the service is fast, then check visually that the widget renders on ADAR2. Checks: `make test` 453 pass + ruff
+  clean; `make accept` (non-live, phases 1–4) 66/66 pass. No frontend change, so no e2e run. No new dependencies.
 - 2026-11-22 · T42 · **partial `[~]`** · Built the code-model path: `create_widget` now takes a plain-language
   `description` (with `code` optional). The chat model (`LLM_MODEL_FAST`) plans the id, title and SQL inputs, and the
   **code model** (`LLM_MODEL_CODE`) writes the TSX (`aibex/llm/widget_code.py`). The code model gets no tools. It sees
