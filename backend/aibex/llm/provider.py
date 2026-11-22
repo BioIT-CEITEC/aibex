@@ -221,6 +221,15 @@ class OpenAICompatibleProvider:
         return response_from_completion(completion)
 
 
+def provider_from_settings(settings: Settings) -> LLMProvider:
+    """`FakeProvider` for `llm_provider == "fake"`, else `OpenAICompatibleProvider` (no network call here)."""
+    if settings.llm_provider == "fake":
+        from aibex.llm.fake import FakeProvider
+
+        return FakeProvider()
+    return OpenAICompatibleProvider.from_settings(settings)
+
+
 def _short(exc: Exception, limit: int = 300) -> str:
     msg = " ".join(str(exc).split())
     return msg[:limit] + ("…" if len(msg) > limit else "")

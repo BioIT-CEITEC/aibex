@@ -35,7 +35,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Phase 2 – prompt editing
 - [x] T21a `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider`, `OpenAICompatibleProvider` (tools), JSON-in-text fallback parser; unit tests with a mocked client (after: T10)
-- [ ] T21b `FakeProvider` rules per docs/api.md + unit tests; provider selection in `create_app` (after: T21a)
+- [x] T21b `FakeProvider` rules per docs/api.md + unit tests; provider selection in `create_app` (after: T21a)
 - [ ] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
 - [ ] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
 - [ ] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
@@ -70,6 +70,18 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T21b · done · `aibex/llm/fake.py` `FakeProvider` with the docs/api.md rules (label / padj below /
+  undo [n] / add widget / no rule matched / "FakeProvider: done" after a tool result). The `LLMProvider` protocol only
+  passes `messages`, so the fake reads the current spec + bundle schema from JSON in system/user messages (fenced or
+  bare, nested allowed, newest first) – **contract for T22b/T23: embed the spec and schema as JSON in the context**
+  (written into docs/api.md). Choices (no open question; documented): genes split on commas/whitespace/"and", case
+  kept; a repeated `padj below` replaces filter `padj-lt`; missing `label` object → added with `selection.key`;
+  `undo` must be the whole message; widget code reads `data.rows.rows`; no context → "no rule matched (reason)".
+  `provider_from_settings` in provider.py; `create_app` uses it unless a provider is injected (OpenAI client is
+  constructed without a network call). Tests `tests/test_fake_provider.py` (23; patches applied through the real
+  session store/validation on the toy bundle; widget panel validates). Checks: `make test` 343 pass + typecheck/lint
+  clean; phase-1 acceptance 34 pass; phase-2 6 pass, same 10 `/chat` failures as before (T22b). No new dependencies.
+  Not a UI task (no e2e).
 - 2026-11-22 · T21a · done · `aibex/llm/provider.py`: `ToolCall`, `LLMResponse`, `LLMProvider` (Protocol) exactly as
   docs/api.md; `OpenAICompatibleProvider(base_url, api_key, model, client=…)` + `from_settings` (fast model; `model=`
   override per call), temperature 0, `tools`/`tool_choice="auto"` only when tools are given, SDK `max_retries=1`,

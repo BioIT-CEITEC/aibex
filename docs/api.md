@@ -39,6 +39,15 @@ class LLMProvider(Protocol):
   - `add widget` → `create_widget` id `row-count`, one input `{"name": "rows", "sql": "SELECT * FROM <first table of the bundle> LIMIT 50"}`, a tiny TSX widget showing the row count of that input
   - anything else → text reply "FakeProvider: no rule matched", no change
   - after a tool result it answers with a short text ("FakeProvider: done") so the loop ends.
+  - Implementation (T21b, `aibex/llm/fake.py`): it sees only `messages`, so it reads the current spec and bundle schema
+    from the context: any JSON object (fenced ```` ```json ```` block or bare, possibly nested such as
+    `{"spec": {...}, "schema": {...}}`) in a system/user message, newest message first; a spec is an object with
+    `bundle` + a `panels` list, a schema an object with a `tables` object. **The chat loop (T22b/T23) must embed the
+    current spec and the schema as JSON in that way.** Without them the label/padj/widget rules reply "no rule matched…"
+    with a reason. Details: gene names split on commas/whitespace/"and", case kept; a second `padj below` replaces
+    filter `padj-lt`; if the first scatter has no `label` object one is added with `selection.key` as field; `undo`
+    must be the whole message (`undo`, `undo 3`). Tool-call ids `fake-<n>`.
+- Selection: `provider_from_settings(settings)` in `provider.py`; `create_app` uses it unless a provider is injected.
 - Implementation (T21a): `parse_text_fallback(text) -> list[ToolCall]` (ids `fallback-<n>`, never raises) and
   `with_text_fallback(response)` for the chat loop; the provider itself does not apply it. Tool-call arguments that are
   not a JSON object become `{"_invalid_arguments": "<raw>"}` so the tool can report the error to the model. Any SDK or

@@ -17,6 +17,7 @@ from aibex import __version__
 from aibex.bundles import Bundle, BundleError, BundleNotFound, BundleRegistry
 from aibex.config import Settings
 from aibex.default_view import default_view
+from aibex.llm.provider import provider_from_settings
 from aibex.panel_data import PanelDataUnsupported, PanelNotFound, panel_data
 from aibex.query import QueryError, run_query
 from aibex.sessions import NothingToUndo, PatchError, Session, SessionNotFound, SessionStore
@@ -202,15 +203,12 @@ def _placeholder_page() -> str:
 
 
 def create_app(settings: Settings | None = None, llm_provider: Any | None = None) -> FastAPI:
-    """Build the app. An injected `llm_provider` (an `LLMProvider`, docs/api.md) wins over `settings.llm_provider`.
-
-    Provider construction from settings (OpenAICompatibleProvider / FakeProvider) is added with the provider
-    module (tasks T21a/T21b); until then `app.state.llm_provider` is only set when one is injected.
-    """
+    """Build the app. An injected `llm_provider` (an `LLMProvider`, docs/api.md) wins over `settings.llm_provider`,
+    which selects `OpenAICompatibleProvider` (`openai`) or `FakeProvider` (`fake`)."""
     settings = settings or Settings()
     app = FastAPI(title="Aibex View", version=__version__)
     app.state.settings = settings
-    app.state.llm_provider = llm_provider
+    app.state.llm_provider = llm_provider if llm_provider is not None else provider_from_settings(settings)
     app.state.bundles = BundleRegistry(settings.data_dir)
     app.state.sessions = SessionStore()
     app.include_router(_api_router())
