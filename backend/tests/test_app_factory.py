@@ -59,3 +59,36 @@ def test_placeholder_root_without_frontend(tmp_path):
     r = TestClient(app).get("/")
     assert r.status_code == 200
     assert "Aibex View" in r.text
+
+
+@pytest.fixture()
+def built_frontend(tmp_path):
+    """A minimal stand-in for `frontend/dist` (index.html + one large hashed asset)."""
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text(
+        '<!doctype html><title>Aibex View</title><script type="module" src="/assets/index-abc.js"></script>'
+    )
+    (dist / "assets" / "index-abc.js").write_text("console.log('aibex');\n" * 2000)
+    return dist
+
+
+def test_serves_built_frontend_at_root(tmp_path, built_frontend):
+    app = create_app(Settings(data_dir=tmp_path, frontend_dist=built_frontend, llm_provider="fake"))
+    c = TestClient(app)
+    r = c.get("/")
+    assert r.status_code == 200 and '<script type="module" src="/assets/index-abc.js">' in r.text
+    assert "has not been built" not in r.text
+    assert c.get("/?bundle=toy").status_code == 200  # the app keeps the bundle in the query string
+    assert c.get("/assets/index-abc.js").status_code == 200
+    assert c.get("/api/health").json()["status"] == "ok"  # the static mount does not shadow /api
+    assert c.get("/api/nope").status_code == 404
+
+
+def test_large_responses_are_gzipped(tmp_path, built_frontend):
+    c = TestClient(create_app(Settings(data_dir=tmp_path, frontend_dist=built_frontend, llm_provider="fake")))
+    r = c.get("/assets/index-abc.js", headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("content-encoding") == "gzip"
+    assert r.text.startswith("console.log")  # httpx decodes transparently
+    r = c.get("/assets/index-abc.js", headers={"Accept-Encoding": "identity"})
+    assert "content-encoding" not in r.headers

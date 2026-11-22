@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Body, FastAPI, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -273,6 +274,9 @@ def create_app(settings: Settings | None = None, llm_provider: Any | None = None
     app.state.llm_provider = llm_provider if llm_provider is not None else provider_from_settings(settings)
     app.state.bundles = BundleRegistry(settings.data_dir)
     app.state.sessions = SessionStore()
+    # The built frontend ships ~6 MB of JS (Plotly + the inlined widget runtime) and the cluster ingress does not
+    # compress by default; gzip cuts it to ~2 MB. Starlette skips text/event-stream, so chat SSE still streams.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
     app.include_router(_api_router())
 
     if settings.frontend_dist.exists():

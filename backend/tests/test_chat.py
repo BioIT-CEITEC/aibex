@@ -228,9 +228,12 @@ def test_chat_endpoint_non_stream_with_fake(client):
 
 def test_chat_endpoint_stream_frames(client):
     sid = _sid(client)
-    with client.stream("POST", f"/api/sessions/{sid}/chat", json={"message": "label Gene_003"}) as r:
+    with client.stream(
+        "POST", f"/api/sessions/{sid}/chat", json={"message": "label Gene_003"}, headers={"Accept-Encoding": "gzip"}
+    ) as r:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/event-stream")
+        assert "content-encoding" not in r.headers  # GZipMiddleware must not buffer the SSE stream
         body = "".join(r.iter_text())
     frames = [f for f in body.split("\n\n") if f]
     types = [f.split("\n")[0].removeprefix("event: ") for f in frames]

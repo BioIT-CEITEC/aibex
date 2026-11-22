@@ -66,12 +66,24 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T51 Saved views per bundle: `/bundles/{id}/views`, `/sessions/{sid}/load-view`, UI save/load; unit tests [P5.2] (after: T15, T24b)
 - [x] T52 Demo-script panel with the 6 demo prompts, click to send [P5.3] (after: T24a)
 - [x] T53 Theme + palette pass (light/dark) [P5.4]; final screenshots of every demo prompt into `logs/screens/` (after: T50, T52)
-- [ ] T54 Production build check: `npm run build`, uvicorn serves `frontend/dist` at `/`, health ok; note any deploy change needed (after: T53)
+- [x] T54 Production build check: `npm run build`, uvicorn serves `frontend/dist` at `/`, health ok; note any deploy change needed (after: T53)
 - [ ] T55 Deploy and run all demo prompts on the public URL [P5.5] – Vojta (after: T54)
 - [ ] T56 Harness mock on branch `demo/workshop-2026-11` (scope to be decided) – Vojta
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T54 · **done** · `npm run build` passes (tsc + Vite 8, 0.6 s). It writes ~6.7 MB to `frontend/dist`:
+  Plotly 4.6 MB, widget runtime 1.4 MB, app 0.4 MB, compile 0.2 MB. Vite warns about chunk size. That is expected, and
+  Plotly is not split further. uvicorn (no env overrides, local `data/`) serves `dist` at `/`. `/api/health` is ok,
+  every asset is 200, and `/?bundle=…` works. Headless Chromium screenshot `logs/screens/T54-prod-build.png`: ADAR2
+  default view, 4 plots, no console errors. One app change: `GZipMiddleware` (minimum 1 KB, level 6) in
+  `create_app`, because ingress-nginx does not compress by default and the page shipped ~6 MB uncompressed (~2 MB
+  gzipped). Starlette excludes `text/event-stream`, so chat SSE still streams. A test pins that. New unit tests: built
+  frontend served at `/` without shadowing `/api`, assets gzipped, SSE not gzipped. No new dependency. **Deploy:** no
+  manifest change needed (node:22-slim satisfies Node ≥ 22.12, `package-lock.json` is present for `npm ci`, and
+  `AIBEX_FRONTEND_DIST` is set). Note added to docs/deploy.md. The Playwright MCP was not available in this session,
+  so I took the screenshot with a one-off Node script that uses `@playwright/test` from `frontend/node_modules`.
+  Checks: `make test` (492), `make accept` (67), `make e2e` (36) all pass.
 - 2026-11-22 · T53 · **done (P5.4)** · Light/dark theme comes from the spec (`theme.dark`, already in the
   schema). A header button (`theme-toggle`) patches `/theme/dark` with source `user`, so the theme is undoable, saved
   with a view, and the assistant can change it too. New `frontend/src/lib/palette.ts` holds one palette for the app:
