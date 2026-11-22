@@ -41,7 +41,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
 - [x] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
 - [x] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
-- [ ] T25 Live check with the real model (`make accept-live`, ≤3 runs, A2.5); tune the system prompt; results + latency in the Log (after: T23)
+- [x] T25 Live check with the real model (`make accept-live`, ≤3 runs, A2.5); tune the system prompt; results + latency in the Log (after: T23)
 - [ ] T26 M2: demo prompts 1–3 and 6 with the real model on the ADAR2 bundle; latency in the Log – Vojta (after: T24b, T25, T32)
 - [ ] T27 Morning review: merge Phases 1–2 to `main`, push, `make restart` – Vojta
 
@@ -70,6 +70,15 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T25 · done · `make accept-live` 3 runs, **3/3 pass** (A2.5 needs ≥2/3) with `LLM_MODEL_FAST=agentic` on
+  the e-INFRA service: latency per chat turn 7.6 s, 7.6 s, 5.6 s (non-stream, whole turn incl. 2 model calls). Every
+  run: `query_data` (checks the genes exist) → one `update_view` (label.values) → short reply; no validation errors,
+  no fallback parsing, version 1. Replies quote padj/log2FC taken from query_data (allowed by the rules, slightly
+  longer than "one or two short sentences" but fine). System prompt left unchanged: nothing to fix, and no live runs
+  were left to verify a change. `test_live_label_genes` now prints model/latency/tool steps (with `-s`) and adds the
+  steps to the failure message; assertions unchanged. Checks: `make test` 396 pass + lint clean; phase-1 acceptance
+  34 pass; phase-2 16/16. Not a UI task. No new dependencies. Writing a scratch probe script to /tmp via heredoc was
+  refused by the runner permissions (used the test's own diagnostics instead). Next: filter/colour prompts live in T26.
 - 2026-11-22 · T24b · done · `GET /sessions/{sid}` now also returns `can_undo`/`can_redo` (steps available; additive,
   docs/api.md + unit test `test_session_state_undo_redo_counts`). Store keeps `canUndo`/`canRedo` (set at once after a
   user patch/undo/redo, confirmed by the history refresh; reset on a new session). New `components/History.tsx`:

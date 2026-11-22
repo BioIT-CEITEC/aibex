@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 
 import pytest
 
@@ -192,9 +193,17 @@ def test_live_label_genes(data_dir):
     s = Settings(data_dir=data_dir, llm_provider="openai")
     c = TestClient(create_app(s))
     sess = c.post("/api/sessions", json={"bundle": "toy"}).json()
+    t0 = time.monotonic()
     r = c.post(f"/api/sessions/{sess['session_id']}/chat?stream=false",
                json={"message": "Label the genes Gene_001 and Gene_002 in the volcano plot."})
+    elapsed = time.monotonic() - t0
     assert r.status_code == 200, r.text
-    spec = r.json()["spec"]
+    body = r.json()
+    # Diagnostics for the PROGRESS.md log (visible with -s): model, latency, tool steps, reply.
+    steps = [(e.get("type"), e.get("name") or e.get("summary") or e.get("message") or "", e.get("status", ""))
+             for e in body.get("events", []) if e.get("type") != "token"]
+    print(f"\n[live] model={os.getenv('LLM_MODEL_FAST')} latency={elapsed:.1f}s version={body.get('version')}"
+          f"\n[live] events={steps}\n[live] reply={(body.get('reply') or '')[:300]!r}")
+    spec = body["spec"]
     labels = [v for p in spec["panels"] if p.get("label") for v in p["label"].get("values", [])]
-    assert {"Gene_001", "Gene_002"} <= set(labels), f"model={os.getenv('LLM_MODEL_FAST')}"
+    assert {"Gene_001", "Gene_002"} <= set(labels), f"model={os.getenv('LLM_MODEL_FAST')} events={steps}"
