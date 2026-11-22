@@ -51,7 +51,8 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); contrast ADAR vs WT in both modalities (Q10); no genome needed [A3.1, A3.2] (after: T30, T11)
 - [x] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
 - [x] T34 Plot row cap on large tables: the ADAR2 volcano (33 513 genes) shows only the first 5000 rows by key, so significant/selected genes can be missing – needs Vojta's decision on Q11 (proposal in the Log) (after: T32)
-- [ ] T33 M3: confirm the assumptions in `docs/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
+- [ ] T35 Apply the T33 answers (docs/adar2-notes.md §7): `samples.tsv` column `group` → `treatment` (`perampanel`/`placebo`), bundle/table descriptions say "ADAR2 knockout (Adarb1 mutant)", default-view titles and axis labels "ADAR2-KO vs WT", PCA colour by genotype with treatment as a second option (shape or alternative); re-run `scripts/convert_adar2.py`, update tests/e2e that name `group` [A3.*] (after: T32)
+- [ ] T33 M3: ~~confirm the assumptions~~ (answered 2026-11-22, see Log); demo prompt 4 works – Vojta (after: T35, T24b)
 
 ## Phase 4 – Level 2 widgets
 - [x] T40a Widget validation (code size/blocklist, input SQL read-only) + `panel-data` input resolution with `$selected` as a bound parameter [A4.2, A4.3] (after: T13b, T15b)
@@ -607,6 +608,14 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
   Python, ephemeral env, `.venv` untouched). Fix: start `scripts/overnight.sh` from a native arm64 terminal
   (check `arch` → `arm64`; maybe the terminal app/`claude` binary runs under Rosetta), or pin the project to a
   uv-managed arm64 Python. Also `uname`/`arch`/pipes with `;` are not in the runner allow-list.
+
+### Decisions (Vojta, 2026-11-22) – ADAR2 questions (T33)
+- **Q-a:** `ADAR` = Adarb1 (ADAR2) knockout; UI says "ADAR2-KO vs WT" (data value stays `ADAR`).
+- **Q-b:** `PER` = perampanel-treated, `PL` = placebo (70 % sorbitol); from the manuscript Lacovich et al. (raw folder).
+  Contrast stays pooled; treatment becomes a `treatment` column for colouring/faceting → T35.
+- **Q-c:** keep 4 024 sites as the main table (`high_confidence` = the R >100-reads set, as a column).
+- **Q-d:** pooled `delta` OK. **Q-e:** overlapping genes → higher `baseMean` OK.
+- Q11 (plot cap 40 000, most significant first) and Q12 (code model/time limit) not answered yet; current defaults stay.
 
 ### Decisions (Vojta, 2026-11-21) – answers to Q1–Q9
 - **Q1 expr grammar:** yes to both – comparisons, `AND/OR/NOT`, string literals, `CASE WHEN` in `expr`; filters may use a

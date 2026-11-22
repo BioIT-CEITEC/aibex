@@ -172,10 +172,16 @@ Visual check on the real data (opt-in e2e, data stay outside the repo):
 `make e2e E2E_REAL_DATA=<AIBEX_DATA_DIR>` runs only `frontend/e2e/real-*.spec.ts` and writes
 `logs/screens/T32-adar2-*.png`.
 
-## 7. Questions for Vojta (T33)
-- **Q-a** Meaning of `ADAR` vs `WT` (ADAR2 knockout / deficient?) and the wording for the UI.
-- **Q-b** Meaning of the `PER` / `PL` groups; should views or the contrast account for them?
-- **Q-c** Site filter: R's "any edited read" set + pooled coverage ≥ 10 per condition (4 024 sites) – OK, or prefer
-  the R `> 100 edited reads` set (≈ 500) as the main table?
-- **Q-d** `delta` as pooled ratio difference (A6) – OK, or mean of per-sample ratios?
-- **Q-e** Sites in two overlapping genes: assign to the higher-expressed gene (A5) – OK?
+## 7. Questions for Vojta (T33) – answered 2026-11-22
+Source for Q-a/Q-b: the submitted manuscript Lacovich et al. (in the raw folder, not in git).
+- **Q-a – answered:** `ADAR` = *Adarb1* (ADAR2) knockout/mutant mice; `WT` = wild-type littermates (C57BL/6N). Samples
+  are P14 pup brains (one hemisphere; RNA-seq on the same animals as the proteomics). UI wording: **"ADAR2-KO vs WT"**;
+  keep the data value `ADAR` in the tables, describe it as "ADAR2 knockout (Adarb1 mutant)".
+- **Q-b – answered:** the prefix is the **treatment** of the dams/pups (pre- and postnatal, oral): `PER` = perampanel
+  (AMPA receptor antagonist), `PL` = placebo/vehicle (70 % sorbitol; "PLAC" in the paper). The design is genotype ×
+  treatment (PER: 5 WT + 4 ADAR, PL: 5 WT + 5 ADAR). The ADAR vs WT contrast stays pooled over both treatments, as in
+  the R code. Rename `samples.tsv` column `group` → `treatment` with values `perampanel` / `placebo` (keep the
+  `PER`/`PL` prefix in sample names), and offer treatment as a colour/facet option (e.g. PCA, editing levels) – T35.
+- **Q-c – confirmed:** keep the 4 024 sites as the main `editing` table; `high_confidence` stays a filterable column.
+- **Q-d – confirmed:** `delta` = pooled ratio difference.
+- **Q-e – confirmed:** a site in overlapping genes goes to the gene with the higher `baseMean`.
