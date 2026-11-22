@@ -123,7 +123,7 @@ class LLMProvider(Protocol):
 | POST | `/sessions/{sid}/redo` | `{steps?: 1}` | `{spec, version}`; nothing to redo → **409**, version unchanged |
 | POST | `/sessions/{sid}/load-view` | `{name}` | `{spec, version}` – loads a saved view as a new, undoable version (Phase 5) |
 | POST | `/sessions/{sid}/chat` | `{message}` | SSE stream (default) or, with `?stream=false`, `{reply, spec, version, events}` |
-| POST | `/sessions/{sid}/panel-data` | `{panel_id, selection?: [keys]}` | `{columns, rows, truncated}` – filters applied, max 5000 rows; unknown panel **404** |
+| POST | `/sessions/{sid}/panel-data` | `{panel_id, selection?: [keys]}` | `{columns, rows, truncated}` – filters applied, max 5000 rows (plot panels 40 000); unknown panel **404** |
 | POST | `/validate-spec` | spec | `{valid: bool, errors: [...]}` |
 
 Unknown session id → **404** everywhere.
@@ -162,7 +162,10 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
 - `table` panels return the listed columns, sorted as specified.
 - Implementation details (`aibex/panel_data.py`): plot `label` holds the label text for rows to be labelled
   (`values` matched case-insensitively, or the `top_n` rows ascending by `by` among the filtered rows), else null;
-  labelled rows come first so the 5000-row cap never drops them; `facet` is returned as column `facet` when set.
+  plot panels are capped at **40 000** rows (T34, Q11 proposed default; tables and widget inputs stay at 5000):
+  labelled rows come first, then rows ascending by `label.by` when set, else by the table's adjusted p-value / p-value
+  column (same common names as the default view; nulls last), then by the key – so a cap drops the least interesting
+  rows; `facet` is returned as column `facet` when set.
   Plot panels on a table that has the spec's `selection.key` as a non-key column (e.g. `gene_id` on editing sites, key
   `site_id`) also return that column, placed before the table key, so their points take part in the linked selection
   (T32; only when `selection.linked`).

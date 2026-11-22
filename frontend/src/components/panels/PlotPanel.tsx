@@ -62,7 +62,7 @@ export function PlotPanel({
         <PlotlyChart figure={shown} testId={`plot-${panel.id}`} onPoints={linked ? onPoints : undefined} />
       </div>
       {data.truncated && (
-        <p className="text-right text-[10px] text-muted-foreground">{panel.kind === 'heatmap' ? 'not all rows fit – first ones shown' : `first ${data.rows.length} rows shown`}</p>
+        <p className="text-right text-[10px] text-muted-foreground">{panel.kind === 'heatmap' ? 'not all rows fit – first ones shown' : `row cap: ${data.rows.length} rows shown, labelled and lowest p-value first`}</p>
       )}
     </div>
   );

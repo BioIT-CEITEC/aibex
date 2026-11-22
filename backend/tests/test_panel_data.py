@@ -128,11 +128,38 @@ def test_plot_carries_selection_key_of_linked_table(bundle):
 
 
 def test_cap_truncates_and_keeps_labelled_rows(bundle, monkeypatch):
-    monkeypatch.setattr(pd_mod, "MAX_ROWS", 50)
+    monkeypatch.setattr(pd_mod, "MAX_PLOT_ROWS", 50)
     p = dict(VOLCANO, label={"field": "gene_name", "values": ["Gene_199"]})
     d = _data(bundle, [p])
     assert len(d["rows"]) == 50 and d["truncated"] is True
     assert _col(d, "label")[0] == "Gene_199"
+
+
+def test_plot_cap_keeps_most_significant_rows(bundle, monkeypatch):
+    # T34/Q11: after labelled rows, plot rows are ordered by padj ascending (nulls last), so the cap drops n.s. genes
+    monkeypatch.setattr(pd_mod, "MAX_PLOT_ROWS", 20)
+    d = _data(bundle, [dict(VOLCANO, y={"field": "padj"})])
+    assert d["columns"] == ["x", "y", "color", "label", "gene_id"]  # the hidden rank column is not returned
+    best = [r[0] for r in _q(bundle, "SELECT padj FROM de ORDER BY padj ASC NULLS LAST, gene_id LIMIT 20")]
+    assert _col(d, "y") == pytest.approx(best) and d["truncated"] is True
+    ids = [r[0] for r in _q(bundle, "SELECT gene_id FROM de ORDER BY padj ASC NULLS LAST, gene_id LIMIT 20")]
+    assert _col(d, "gene_id") == ids
+
+
+def test_plot_rank_follows_label_by(bundle, monkeypatch):
+    monkeypatch.setattr(pd_mod, "MAX_PLOT_ROWS", 10)
+    p = dict(VOLCANO, x={"field": "baseMean"}, label={"field": "gene_name", "top_n": 3, "by": "baseMean"})
+    d = _data(bundle, [p])
+    best = [r[0] for r in _q(bundle, "SELECT baseMean FROM de ORDER BY baseMean ASC NULLS LAST, gene_id LIMIT 10")]
+    assert _col(d, "x") == pytest.approx(best)
+    assert all(v is not None for v in _col(d, "label")[:3])
+
+
+def test_plot_cap_is_separate_from_table_cap(bundle, monkeypatch):
+    monkeypatch.setattr(pd_mod, "MAX_ROWS", 50)
+    assert len(_data(bundle, [VOLCANO])["rows"]) == 200
+    assert len(_data(bundle, [GENES])["rows"]) == 50
+    assert pd_mod.MAX_PLOT_ROWS >= 40000 > pd_mod.MAX_ROWS
 
 
 def test_log_of_zero_is_null_not_an_error():

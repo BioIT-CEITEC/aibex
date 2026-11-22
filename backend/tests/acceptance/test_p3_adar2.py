@@ -77,6 +77,9 @@ def test_default_view_combines_modalities(real_client):
         assert d["rows"], f"panel {p['id']} has no data"
         if p.get("table") in editing and p["type"] == "plot":
             assert key in d["columns"] and not d["truncated"], (p["id"], d["columns"])
+        if p.get("table") == "de" and p["type"] == "plot" and p.get("kind") not in ("pca", "heatmap"):
+            # T34: the whole DE table (~33 500 genes) fits under the plot cap – no gene silently missing
+            assert not d["truncated"], p["id"]
 
 
 def test_raw_data_not_in_repo():

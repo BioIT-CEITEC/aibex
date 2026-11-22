@@ -7,7 +7,8 @@ quoted, `expr`s are compiled by aibex/expr.py (the raw string never runs) and fi
   `facet` when set, plus the table key column (named as in the bundle) – preceded by the spec's `selection.key` column
   when the table has it as a non-key column. `label` holds the label text for rows to be
   labelled (explicit `values`, matched case-insensitively, or the `top_n` rows ascending by `by`), else NULL.
-  Labelled rows come first so the 5000-row cap never drops them.
+  Plots are capped at 40 000 rows (tables at 5000): labelled rows first, then ascending by `label.by` or else the
+  table's padj / p-value column (nulls last), then by the key – so the cap drops the least interesting rows (T34).
 - `table` panels: the listed columns (all when omitted) in order, plus the key column at the end when not listed;
   sorted as specified, then by the key.
 - `pca` / `heatmap` panels: computed from the matrix table in aibex/matrix_panels.py (filters applied first);
@@ -25,12 +26,14 @@ from typing import Any
 import duckdb
 
 from aibex.bundles import Bundle
+from aibex.default_view import find_role
 from aibex.expr import compile_expr
 from aibex.matrix_panels import MatrixPanelError, heatmap_data, pca_data
 from aibex.query import jsonable
 from aibex.spec import Filter, PlotPanel, Spec, TablePanel, TextPanel
 
-MAX_ROWS = 5000
+MAX_ROWS = 5000  # table panels (and widget inputs)
+MAX_PLOT_ROWS = 40000  # plot panels: a whole DE table fits (WebGL scatter); most interesting rows first (T34, Q11)
 
 _OPS = {"<=": "<=", ">=": ">=", "<": "<", ">": ">", "==": "=", "!=": "<>"}
 
@@ -126,6 +129,7 @@ def _plot_select(
     exprs: list[str] = []
     names: list[str] = []
     params: list = []
+    rank = _rank_column(p, bundle)
     for name in ("x", "y", "color", "size"):
         enc = getattr(p, name)
         if enc is not None:
@@ -154,8 +158,26 @@ def _plot_select(
     if key is not None and key not in names:
         exprs.append(q(key))
         names.append(key)
+    if rank is not None:
+        # hidden helper column (dropped by the outer query): the source column may not be among the outputs
+        exprs.append(q(rank))
+        names.append(_RANK)
+        order.append(f"{q(_RANK)} ASC NULLS LAST")
+    if key is not None:
         order.append(q(key))
     return exprs, names, params, ", ".join(order)
+
+
+_RANK = "__aibex_rank"
+
+
+def _rank_column(p: PlotPanel, bundle: Bundle) -> str | None:
+    """Column that orders plot rows "most interesting first" before the row cap: `label.by` when set, else the
+    table's adjusted p-value / p-value column (by common names, as in the default view), else None."""
+    cols = _columns(bundle, p.table)
+    if p.label is not None and p.label.by in cols:
+        return p.label.by
+    return find_role(cols, "padj") or find_role(cols, "pvalue")
 
 
 def _table_select(p: TablePanel, bundle: Bundle, key: str | None) -> tuple[list[str], list[str], str]:
@@ -204,21 +226,25 @@ def panel_data(spec: Spec, bundle: Bundle, panel_id: str) -> dict:
     if conds:
         source = f"(SELECT * FROM {q(panel.table)} WHERE {' AND '.join(conds)})"
     sql = f"SELECT {', '.join(f'{e} AS {q(n)}' for e, n in zip(exprs, names, strict=True))} FROM {source} AS t"
-    if order and isinstance(panel, PlotPanel):
-        # plot ORDER BY refers to output columns (label, key): order in an outer query to avoid name clashes
-        sql = f"SELECT * FROM ({sql}) AS o ORDER BY {order}"
+    if isinstance(panel, PlotPanel):
+        # plot ORDER BY refers to output columns (label, rank, key): order in an outer query to avoid name clashes;
+        # the outer query drops the hidden rank column
+        names = [n for n in names if n != _RANK]
+        outer = ", ".join(q(n) for n in names)
+        sql = f"SELECT {outer} FROM ({sql}) AS o" + (f" ORDER BY {order}" if order else "")
     elif order:
         sql += f" ORDER BY {order}"
-    sql += f" LIMIT {MAX_ROWS + 1}"
+    cap = MAX_PLOT_ROWS if isinstance(panel, PlotPanel) else MAX_ROWS
+    sql += f" LIMIT {cap + 1}"
     try:
         # parameter order follows the SQL text: SELECT (label values) before the filter subquery
         rows = bundle.cursor().execute(sql, params + where_params).fetchall()
     except duckdb.Error as exc:
         first = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
         raise PanelDataError(f"panel {panel_id!r}: query failed: {first}") from None
-    truncated = len(rows) > MAX_ROWS
+    truncated = len(rows) > cap
     return {
         "columns": names,
-        "rows": [[jsonable(v) for v in r] for r in rows[:MAX_ROWS]],
+        "rows": [[jsonable(v) for v in r] for r in rows[:cap]],
         "truncated": truncated,
     }

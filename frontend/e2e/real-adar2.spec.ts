@@ -23,8 +23,12 @@ test('T32: ADAR2 default view combines expression and editing', async ({ page })
   const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflowX).toBeLessThanOrEqual(0);
 
+  // T34: the whole volcano (~33 500 genes) fits under the plot cap – no "row cap" note
+  await expect(page.getByTestId('panel-volcano').getByText(/rows shown/)).toHaveCount(0);
+
   await page.waitForTimeout(500); // let Plotly finish its resize redraw
   await page.screenshot({ path: '../logs/screens/T32-adar2-viewport.png' });
+  await page.getByTestId('panel-volcano').screenshot({ path: '../logs/screens/T34-adar2-volcano.png' });
   await page.screenshot({ path: '../logs/screens/T32-adar2-full.png', fullPage: true });
 
   // the gene with the most editing sites (first row) → selection reaches the editing plots

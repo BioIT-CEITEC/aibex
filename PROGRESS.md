@@ -50,7 +50,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T30 Inspect `raw/adar2-editing` freely (data are published): read the R code to learn the filters/normalisation, map files → bundle tables; write assumptions, file sizes and the planned preprocessing to `docs/adar2-notes.md` (in git, no data rows beyond a few examples); do not copy raw files (after: T29)
 - [x] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); contrast ADAR vs WT in both modalities (Q10); no genome needed [A3.1, A3.2] (after: T30, T11)
 - [x] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
-- [ ] T34 Plot row cap on large tables: the ADAR2 volcano (33 513 genes) shows only the first 5000 rows by key, so significant/selected genes can be missing – needs Vojta's decision on Q11 (proposal in the Log) (after: T32)
+- [x] T34 Plot row cap on large tables: the ADAR2 volcano (33 513 genes) shows only the first 5000 rows by key, so significant/selected genes can be missing – needs Vojta's decision on Q11 (proposal in the Log) (after: T32)
 - [ ] T33 M3: confirm the assumptions in `docs/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
 
 ## Phase 4 – Level 2 widgets
@@ -71,6 +71,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T34 · done · Q11 was unanswered, so this follows its **proposed default** (easy to revert: two constants
+  + ORDER BY in `aibex/panel_data.py`). Plot panel-data cap raised to `MAX_PLOT_ROWS = 40 000` (tables, widget
+  inputs and the LLM's 200-row `query_data` unchanged). Plot rows are ordered labelled first, then ascending by
+  `label.by` when set, else by the table's padj / p-value column (same name list as the default view, `find_role`),
+  nulls last, then by key – via a hidden rank column that the outer query drops. So the ADAR2 volcano (33 513 genes)
+  is no longer truncated, and on bigger tables the cap drops the least significant rows. Truncation note in the plot
+  panel now reads "row cap: N rows shown, labelled and lowest p-value first". docs/api.md updated (endpoint table +
+  panel data shape). Tests: unit `test_plot_cap_keeps_most_significant_rows`, `test_plot_rank_follows_label_by`,
+  `test_plot_cap_is_separate_from_table_cap` (existing cap test now patches `MAX_PLOT_ROWS`); A3.3 strengthened (DE
+  plot panels not truncated); real-data e2e checks no cap note on the volcano, screenshot
+  `logs/screens/T34-adar2-volcano.png` (all genes drawn). Checks: `make test` 400 pass + lint clean; phase-1 34,
+  phase-2 16, phase-3 4/4 pass; `make e2e` 16 pass, only E4.1 (Phase 4) fails as before; real-data e2e 1/1 pass.
+  No new dependencies. Next: T40a (T26/T33 are Vojta's).
 - 2026-11-22 · T32 · done · The converter now writes the ADAR2 starting view into the bundle (`views/default.json`,
   `default_view` in bundle.yaml – the documented mechanism, so ADAR2 column names stay out of the app). Panels:
   `volcano` (de, first plot, empty label), `editing-vs-expression` (per site: gene log2FC vs editing Δ), `editing-levels`
