@@ -95,6 +95,16 @@ class LLMProvider(Protocol):
   `undo_view` neither count nor reset; two rejected calls in one response also stop. At the step limit, changes
   applied earlier in the turn are kept (undoable). Provider errors (`LLMError` or any exception) → `error` event.
   `message` must be 1–8000 characters (else 422).
+- System prompt (T23, `aibex/llm/prompts.py`): `SYSTEM_PROMPT` = role, tools, a compact summary of
+  docs/spec-format.md (filters, plot/pca/heatmap/table/text panels, `expr` grammar, layout, plotly overrides),
+  rules (schema columns only, minimal changes, never invent data, ask when unclear, short plain-text answer, JSON
+  fallback). The system message is the prompt + `# Current panels` (one line per panel: `index: id (type/kind,
+  table) "title"`, `panel_index_text`) + the fenced JSON `{schema, spec, panel_index}`. The prompt itself contains no
+  ``` fences. `tests/test_prompts.py` keeps it in sync (tool names, expr function allow-list, examples validate).
+  **Update the prompt when docs/spec-format.md changes**; `create_widget` is added to it in T40b.
+- SSE: `StreamingResponse` (`text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`); events are sent
+  as they happen (tool/spec per step). The final reply is one `token` event (no per-token streaming from the provider
+  yet).
 
 ## REST endpoints (all JSON, prefix `/api`)
 | method | path | body | response |

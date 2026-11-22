@@ -21,6 +21,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
+from aibex.llm.prompts import SYSTEM_PROMPT, panel_index_text
 from aibex.llm.provider import LLMProvider, LLMResponse, with_text_fallback
 from aibex.llm.tools import TOOL_SCHEMAS, run_tool
 from aibex.sessions import Session
@@ -30,18 +31,6 @@ MAX_FAILED_CHANGES = 2  # rejected update_view/create_widget in a row
 HISTORY_MESSAGES = 6  # earlier chat messages (user + assistant) sent as context
 MAX_TRANSCRIPT = 40  # chat messages kept per session
 MAX_REPLY_IN_HISTORY = 2000
-
-SYSTEM_PROMPT = """You are AIBEX, an assistant that changes an interactive bioinformatics results dashboard.
-The dashboard is fully described by a JSON view spec (shown below with the bundle schema). You change it only with tools:
-- update_view(patch, summary): an RFC 6902 JSON Patch on the spec. Paths use panel indices, e.g. /panels/0/title;
-  use the panel index below. The patched spec is validated; if errors come back, fix the patch and try again.
-- undo_view(steps): undo earlier changes.
-- describe_bundle(): column statistics. query_data(sql): one read-only DuckDB SELECT, at most 200 rows; prefer
-  aggregates and ORDER BY ... LIMIT.
-Rules: use only tables and columns from the schema; keep changes minimal; never invent data. After a change, answer
-with one or two short sentences saying what you changed. If the request is unclear or impossible, ask or explain
-without changing anything. If you cannot call tools, reply with a fenced ```json block
-{"patch": [...], "summary": "..."}."""
 
 
 @dataclass
@@ -58,7 +47,10 @@ def _context_message(session: Session) -> dict:
     body = json.dumps(context, ensure_ascii=False, default=str)
     return {
         "role": "system",
-        "content": f"{SYSTEM_PROMPT}\n\nCurrent bundle schema, view spec and panel index:\n```json\n{body}\n```",
+        "content": (
+            f"{SYSTEM_PROMPT}\n\n# Current panels (index: id)\n{panel_index_text(spec)}\n\n"
+            f"# Current bundle schema, view spec and panel index (JSON)\n```json\n{body}\n```"
+        ),
     }
 
 

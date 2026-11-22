@@ -38,7 +38,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T21b `FakeProvider` rules per docs/api.md + unit tests; provider selection in `create_app` (after: T21a)
 - [x] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
 - [x] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
-- [ ] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
+- [x] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
 - [ ] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
 - [ ] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
 - [ ] T25 Live check with the real model (`make accept-live`, ≤3 runs, A2.5); tune the system prompt; results + latency in the Log (after: T23)
@@ -70,6 +70,16 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T23 · done · New `aibex/llm/prompts.py`: full `SYSTEM_PROMPT` (role, tools, spec-format summary incl.
+  filters/plot/pca/heatmap/table/text, expr grammar, layout rules, plotly log-axis/opacity recipes, rules: schema
+  columns only, minimal single patch, never invent numbers, ask when unclear, short plain answer, JSON fallback) +
+  `panel_index_text` (readable `index: id (type/kind, table) "title"` lines, added before the JSON context; JSON
+  `panel_index` kept for the FakeProvider). SSE streaming itself was already in place from T22b (A2.4 passes);
+  no per-token streaming from the provider (final text = one `token` event) – enough for T24a, revisit if latency
+  feels bad in T25. docs/api.md implementation note. Tests `tests/test_prompts.py` (8: tool names, expr allow-list
+  sync, no ``` fences in the prompt, prompt examples validate on the toy bundle, FakeProvider still finds the context).
+  Checks: `make test` 395 pass + lint clean; phase-1 acceptance 34 pass; phase-2 16/16 pass. No live run (T25). No
+  new dependencies. No UI.
 - 2026-11-22 · T22b · done · `aibex/llm/chat.py`: `chat_events` generator (always ends with `done`, never raises),
   `run_chat` (non-stream), `sse_frame`; `POST /sessions/{sid}/chat` (`?stream=false` → `{reply, spec, version,
   events}`; default already streams SSE via `StreamingResponse`, so A2.4 passes too – T23 still owns the real system
