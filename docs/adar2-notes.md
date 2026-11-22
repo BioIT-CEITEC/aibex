@@ -144,7 +144,21 @@ Ensembl_Id          baseMean  log2FoldChange  lfcSE  pvalue    padj      signifi
 ENSMUSG00000085666  237.4     4.35            0.110  8.4e-204  1.6e-199  TRUE            Gm9855        processed_pseudogene
 ```
 
-## 6. Questions for Vojta (T33)
+## 6. Converter result (T31)
+`scripts/convert_adar2.py` implements section 4 as planned (defaults derive `--raw`/`--out` from
+`$AIBEX_DATA_DIR`; the script does not read `.env`, so pass the paths or export the variable). Result: 33 513 genes,
+1 184 of them with editing sites; **4 024 sites** (485 `high_confidence`, 719 with |delta| > 0.1); 1 225 sites listed
+in `mm10.txt`; pooled editing over the 4 024 sites WT 0.109, ADAR 0.079. All xlsx symbols map to a DE gene. Sanity
+check: the Gria2 Q/R site (`3:80706912`) has `edit_wt` 0.99 and `edit_adar` 0.15, which supports Q-a (ADAR =
+ADAR2-deficient). Details beyond the plan:
+- `editing_levels` (matrix table, site × sample, null when a sample has no coverage) is included, linked
+  `editing_levels.site_id → editing.site_id`.
+- A symbol that is on several DE rows maps to the row with the highest `baseMean` (same rule as A5).
+- `region` = `seqReg` of `mm10.txt` with `E`/`I` written as `exon`/`intron`; other codes (e.g. `O`) are kept as they
+  are.
+- `samples.tsv` order: WT then ADAR, each by group and sample. Column order of `counts`/`editing_levels` follows it.
+
+## 7. Questions for Vojta (T33)
 - **Q-a** Meaning of `ADAR` vs `WT` (ADAR2 knockout / deficient?) and the wording for the UI.
 - **Q-b** Meaning of the `PER` / `PL` groups; should views or the contrast account for them?
 - **Q-c** Site filter: R's "any edited read" set + pooled coverage ≥ 10 per condition (4 024 sites) – OK, or prefer

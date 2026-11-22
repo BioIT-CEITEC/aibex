@@ -48,7 +48,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 ## Phase 3 – ADAR2
 - [x] T29 Put the ADAR2 results at `$AIBEX_DATA_DIR/../raw/adar2-editing`: expression results (DE table, RSEM), editing result tables/counts, and the R analysis code – Vojta
 - [x] T30 Inspect `raw/adar2-editing` freely (data are published): read the R code to learn the filters/normalisation, map files → bundle tables; write assumptions, file sizes and the planned preprocessing to `docs/adar2-notes.md` (in git, no data rows beyond a few examples); do not copy raw files (after: T29)
-- [ ] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); contrast ADAR vs WT in both modalities (Q10); no genome needed [A3.1, A3.2] (after: T30, T11)
+- [x] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); contrast ADAR vs WT in both modalities (Q10); no genome needed [A3.1, A3.2] (after: T30, T11)
 - [ ] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
 - [ ] T33 M3: confirm the assumptions in `docs/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
 
@@ -70,6 +70,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T31 · done · New `scripts/convert_adar2.py` (PEP 723 deps polars, fastexcel, pyyaml – script only, no
+  backend dependency; fastexcel because openpyxl cannot read these xlsx files). Follows docs/adar2-notes.md section 4
+  with the proposed T30 defaults (A1–A6, Q-c filter, open questions Q-a…Q-e still for T33). It wrote
+  `$AIBEX_DATA_DIR/adar2-editing/` (outside git): `samples.tsv` (sample, genotype, group, replicate), `de` (33 513
+  genes, DESeq2 + `n_edit_sites`/`mean_delta`/`max_abs_delta`/`edit_wt`/`edit_adar`), `counts` (normCounts matrix),
+  `editing` (**4 024 sites**, 485 high-confidence), plus the optional `editing_levels` matrix (site × sample) for
+  T32/T42. Links: editing→de, counts→de, editing_levels→editing. Pooled editing WT 0.109 vs ADAR 0.079. The Gria2
+  Q/R site goes from 0.99 (WT) to 0.15 (ADAR), which supports reading ADAR as ADAR2-deficient. Run:
+  `uv run scripts/convert_adar2.py --raw <raw/adar2-editing> --out <data>/adar2-editing` (takes a few seconds).
+  docs/adar2-notes.md section 6 = result + details beyond the plan. Checks: `make test` 396 pass + lint clean; ruff on
+  the script clean; phase-1 34 pass; phase-2 16/16; phase-3 **4/4 pass** (A3.1, A3.2; A3.3 already passes with the
+  generic default view (de + counts only); T32 adds editing panels). No unit tests for the converter: it needs the
+  real raw files, and A3.1/A3.2 check its output. Not a UI task. Next: T32.
 - 2026-11-22 · T30 · done · New `docs/adar2-notes.md`: file inventory with sizes (used / not used), what the R code
   does, reproduction check, samples/contrast, planned bundle (`samples.tsv`, `de`, `counts`, `editing`, optional
   `editing_levels`) with column definitions, a few example rows, questions Q-a…Q-e for T33. Key facts: the
