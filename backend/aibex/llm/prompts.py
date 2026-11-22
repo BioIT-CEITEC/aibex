@@ -54,7 +54,7 @@ Panels – common fields: "id" (unique, kebab-case), "type", "title", optional "
   Log axis: "plotly": {"layout": {"yaxis": {"type": "log"}}}. Point transparency: "plotly": {"trace": {"marker": \
 {"opacity": 0.5}}}.
 - pca: {"type": "plot", "kind": "pca", "table": <matrix table>, "top_n": 500, "scale": "log1p"|"none", \
-"color": {"field": <samples.tsv column>}}
+"color": {"field": <samples.tsv column>}, "symbol"?: {"field": <samples.tsv column>} (marker shape)}
 - heatmap: {"type": "plot", "kind": "heatmap", "table": <matrix table>, "rows": {"top_n": 30, "by": "<table>.<column>", \
 "values": [keys]}, "group_by": <samples.tsv column>, "scale": "row-z"|"log1p"|"none"}
 - table: {"type": "table", "table", "columns": [...], "sort": [{"field", "dir": "asc"|"desc"}], "page_size": 25}

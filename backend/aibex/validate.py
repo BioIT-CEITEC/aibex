@@ -121,6 +121,8 @@ class _Checker:
                          f"{p.table!r} has fewer than 2 sample columns")
             if p.kind == "pca" and p.color is not None:
                 self.sample_column(f"{loc}.color.field", p.color.field)
+            if p.kind == "pca" and p.symbol is not None:
+                self.sample_column(f"{loc}.symbol.field", p.symbol.field)
             if p.kind == "heatmap":
                 self.sample_column(f"{loc}.group_by", p.group_by)
                 if p.rows is not None and p.rows.by is not None:

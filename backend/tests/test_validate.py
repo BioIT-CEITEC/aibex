@@ -75,6 +75,22 @@ def test_full_spec_is_valid(bundle):
     assert spec is not None
 
 
+def test_pca_symbol_by_sample_column(bundle):
+    """T35: a pca may set the marker shape by a second samples.tsv column."""
+    s = full_spec()
+    s["panels"][1]["symbol"] = {"field": "genotype", "label": "Genotype"}
+    spec, errors = validate_spec(s, bundle)
+    assert errors == [] and spec is not None
+
+
+@pytest.mark.parametrize("idx", [0, 2])  # scatter, heatmap
+def test_symbol_only_on_pca(bundle, idx):
+    s = full_spec()
+    s["panels"][idx]["symbol"] = {"field": "genotype"}
+    spec, errors = validate_spec(s, bundle)
+    assert spec is None and any("symbol" in e for e in errors), errors
+
+
 def test_samples_loaded(bundle):
     assert bundle.samples_columns == ["sample", "genotype"]
     assert len(bundle.samples) == 6
@@ -103,6 +119,7 @@ def _mut(path_fn):
         (lambda s: s["panels"][0].update(facet="nope"), "panels[0].facet"),
         (lambda s: s["panels"][1].update(table="de"), "panels[1].table"),  # not a matrix table
         (lambda s: s["panels"][1]["color"].update(field="batch"), "panels[1].color.field"),
+        (lambda s: s["panels"][1].update(symbol={"field": "batch"}), "panels[1].symbol.field"),  # T35
         (lambda s: s["panels"][2].update(group_by="batch"), "panels[2].group_by"),
         (lambda s: s["panels"][2]["rows"].update(by="de.nope"), "panels[2].rows.by"),
         (lambda s: s["panels"][2]["rows"].update(by="editing.delta"), "panels[2].rows.by"),  # not linked

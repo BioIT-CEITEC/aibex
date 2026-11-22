@@ -51,7 +51,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); contrast ADAR vs WT in both modalities (Q10); no genome needed [A3.1, A3.2] (after: T30, T11)
 - [x] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
 - [x] T34 Plot row cap on large tables: the ADAR2 volcano (33 513 genes) shows only the first 5000 rows by key, so significant/selected genes can be missing – needs Vojta's decision on Q11 (proposal in the Log) (after: T32)
-- [ ] T35 Apply the T33 answers (docs/adar2-notes.md §7): `samples.tsv` column `group` → `treatment` (`perampanel`/`placebo`), bundle/table descriptions say "ADAR2 knockout (Adarb1 mutant)", default-view titles and axis labels "ADAR2-KO vs WT", PCA colour by genotype with treatment as a second option (shape or alternative); re-run `scripts/convert_adar2.py`, update tests/e2e that name `group` [A3.*] (after: T32)
+- [x] T35 Apply the T33 answers (docs/adar2-notes.md §7): `samples.tsv` column `group` → `treatment` (`perampanel`/`placebo`), bundle/table descriptions say "ADAR2 knockout (Adarb1 mutant)", default-view titles and axis labels "ADAR2-KO vs WT", PCA colour by genotype with treatment as a second option (shape or alternative); re-run `scripts/convert_adar2.py`, update tests/e2e that name `group` [A3.*] (after: T32)
 - [ ] T33 M3: ~~confirm the assumptions~~ (answered 2026-11-22, see Log); demo prompt 4 works – Vojta (after: T35, T24b)
 
 ## Phase 4 – Level 2 widgets
@@ -72,6 +72,21 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T35 · **done (A3.5)** · Applied the T33 answers in `scripts/convert_adar2.py` and re-ran it (same
+  numbers: 33 513 genes, 4 024 sites). `samples.tsv` column `group` is now `treatment` (`perampanel`/`placebo`; an
+  unknown prefix stops the converter). Sample names and the data values `ADAR`/`WT` are unchanged. Bundle, table and
+  column descriptions say "ADAR2 knockout (Adarb1 mutant)" and name the treatments. Default-view titles, axis labels
+  and descriptions say "ADAR2-KO vs WT". For "treatment as a second option" I added a small, additive spec field
+  `symbol: {field, label?}` on **pca only** (marker shape by a samples.tsv column). It is validated like `color.field`
+  and rejected on other kinds. The frontend draws one trace per colour × shape with the legend "WT · placebo"…, and
+  the LLM prompt lists it. Docs: spec-format.md, api.md (validation rules), adar2-notes.md §4/§6c. ADAR2 PCA: colour
+  genotype (WT blue, ADAR red), shape treatment. No tests named `group` for ADAR (the heatmap long-format `group`
+  column is a separate thing and stays). Tests: `test_pca_symbol_by_sample_column`, `test_symbol_only_on_pca`, a new
+  symbol case in the semantic-error table, and new acceptance criterion **A3.5** `test_samples_genotype_and_treatment`
+  (docs/acceptance.md). Note: the overnight shell has no `AIBEX_DATA_DIR`, so I ran the converter with explicit
+  `--raw/--out` (path taken from `Settings().data_dir`, without reading `.env`); the env-prefix form was refused.
+  Screenshot `logs/screens/T32-adar2-viewport.png` (real-data e2e), checked. Checks: `make test` 486 pass +
+  ruff/typecheck/lint clean; `make accept` 67/67; `make e2e` 31/31; real-data e2e 2/2. No new dependencies.
 - 2026-11-22 · T51 · **done (P5.2)** · New `aibex/views.py`: a saved view is a plain spec in
   `<bundle>/views/<name>.json` (as in docs/bundle-format.md), written atomically. Endpoints as in docs/api.md:
   `GET/POST /bundles/{id}/views` and `POST /sessions/{sid}/load-view`. Load-view applies the view as one undoable

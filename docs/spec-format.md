@@ -80,6 +80,9 @@ Common fields: `id` (unique, kebab-case), `type`, `title`, optional `description
 ```
 `table` is a matrix table (see bundle-format.md); PCA uses the `top_n` most variable rows (default 500) after `scale`
 (`none` | `log1p`, default `log1p`). `color.field` is a column of `samples.tsv`. Each point is a sample.
+Optional `symbol: {"field": <samples.tsv column>, "label"?}` (pca only) sets the marker shape per value of a second
+categorical annotation, e.g. `"color": {"field": "genotype"}, "symbol": {"field": "treatment"}`; the legend then has one
+entry per colour × shape combination.
 
 ### `heatmap`
 ```json

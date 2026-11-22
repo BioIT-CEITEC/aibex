@@ -46,6 +46,8 @@ export interface PlotPanel extends PanelBase {
   color?: Color;
   size?: Size;
   label?: Label;
+  /** pca only: marker shape by a samples.tsv column */
+  symbol?: { field: string; label?: string };
   facet?: string;
   plotly?: Record<string, JsonValue>;
   top_n?: number;

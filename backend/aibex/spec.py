@@ -100,6 +100,13 @@ class Size(_Model):
         return self
 
 
+class Symbol(_Model):
+    """Marker shape by a categorical samples.tsv column (pca only), e.g. treatment next to colour = genotype."""
+
+    field: str
+    label: str | None = None
+
+
 class Label(_Model):
     field: str
     values: list[str] = Field(default_factory=list)
@@ -152,6 +159,7 @@ class PlotPanel(_PanelBase):
     color: Color | None = None
     size: Size | None = None
     label: Label | None = None
+    symbol: Symbol | None = None
     facet: str | None = None
     plotly: dict[str, Any] = Field(default_factory=dict)
     # pca / heatmap
@@ -179,7 +187,7 @@ class PlotPanel(_PanelBase):
         elif self.kind == "heatmap":
             if self.rows is None:
                 raise ValueError("heatmap panels need 'rows'")
-            extra = [n for n in ("x", "y", "size", "label", "top_n") if getattr(self, n) is not None]
+            extra = [n for n in ("x", "y", "size", "label", "top_n", "symbol") if getattr(self, n) is not None]
             if extra:
                 raise ValueError(f"heatmap panels do not use {', '.join(extra)}")
         else:
@@ -188,6 +196,8 @@ class PlotPanel(_PanelBase):
             extra = [n for n in ("top_n", "scale", "rows", "group_by") if getattr(self, n) is not None]
             if extra:
                 raise ValueError(f"{', '.join(extra)} only apply to pca/heatmap plots")
+            if self.symbol is not None:
+                raise ValueError("symbol only applies to pca plots")
         return self
 
 

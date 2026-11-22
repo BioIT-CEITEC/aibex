@@ -240,11 +240,11 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   kebab-case; axis/`color`/`size` have exactly one of `field`/`expr`; `color` has `palette` or `colorscale`, not both;
   filter `between` needs `[min, max]`, `in` a non-empty list, `contains` a string; layout items fit the 12-column grid
   (`x + w ≤ 12`, `w,h ≥ 1`; react-grid-layout flags `static`/`moved`/`min*`/`max*` allowed); `pca` scale `none|log1p`,
-  `heatmap` needs `rows`; widget `language` is `tsx` (default) or `jsx`
+  `symbol` only on `pca`; `heatmap` needs `rows`; widget `language` is `tsx` (default) or `jsx`
 - `table` / `field` references must exist in the bundle schema (`expr` columns too); filter `field`s too; also
   `label.field`/`label.by`, `facet`, table `columns`/`sort`, and `selection.key` (a column of at least one table)
 - semantic (`aibex/validate.py`): `pca`/`heatmap` tables must be matrix tables (≥ 2 numeric sample columns, matched
-  to `samples.tsv` names when present); pca `color.field` and heatmap `group_by` are `samples.tsv` columns; heatmap
+  to `samples.tsv` names when present); pca `color.field`/`symbol.field` and heatmap `group_by` are `samples.tsv` columns; heatmap
   `rows.by` is `<table>.<column>` of the matrix table or a table linked to it; `spec.bundle` must be the bundle validated
   against. `expr` columns match case-insensitively (as in DuckDB) and each `expr` is type-checked by a `LIMIT 0` dry run
   of the compiled SQL (`aibex/expr.py` rebuilds the SQL from tokens; the raw string never runs)

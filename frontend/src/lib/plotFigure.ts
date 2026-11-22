@@ -15,6 +15,8 @@ const WEBGL_THRESHOLD = 1500;
 export const MAX_ANNOTATIONS = 60;
 /** Fallback categorical colours (Plotly/D3 category10) when the spec has no palette entry. */
 const COLORWAY = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+/** PCA `symbol` marker shapes, assigned in order of first appearance. */
+const PCA_SYMBOLS = ['circle', 'diamond', 'square', 'triangle-up', 'cross', 'x', 'star', 'triangle-down'];
 /** Generic panel-data columns; anything else (except `facet`/`sample`) is the table key used for selection. */
 const GENERIC = new Set(['x', 'y', 'color', 'size', 'label', 'facet']);
 
@@ -122,16 +124,25 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
   const sampleIdx = cols.indexOf('sample');
   const colourField = panel.color?.field;
   const ci = colourField ? cols.indexOf(colourField) : -1;
+  const symbolField = panel.symbol?.field;
+  const si = symbolField ? cols.indexOf(symbolField) : -1;
   const annot = cols.map((c, i) => [c, i] as const).filter(([c]) => !['x', 'y', 'sample'].includes(c));
   const rows = data.rows;
+  // marker shape per symbol value, in order of first appearance (samples.tsv order)
+  const symbolOf = new Map<string, string>();
+  if (si >= 0) [...groupBy(rows, si).keys()].forEach((k, n) => symbolOf.set(k, PCA_SYMBOLS[n % PCA_SYMBOLS.length]));
+  const symKey = (r: Row) => (r[si] === null || r[si] === undefined ? 'n/a' : String(r[si]));
   const layout = baseLayout(data.x_label ?? 'PC1', data.y_label ?? 'PC2');
+  const legendTitle = [panel.color?.label || colourField, si >= 0 ? panel.symbol?.label || symbolField : undefined]
+    .filter(Boolean)
+    .join(' · ');
   layout.legend = {
     orientation: 'h',
     x: 1,
     xanchor: 'right',
     y: 1.01,
     yanchor: 'bottom',
-    title: { text: panel.color?.label || colourField || '' },
+    title: { text: legendTitle },
   };
   const hover =
     '<b>%{customdata[0]}</b>' +
@@ -176,9 +187,19 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
     textfont: { size: 10, color: '#444' },
     customdata: rs.map((r) => [sampleIdx >= 0 ? r[sampleIdx] : '', ...annot.map(([, i]) => r[i])]),
     hovertemplate: hover,
-    marker: { size: 10, opacity: 0.9, line: { width: 1, color: '#fff' } },
+    marker: {
+      size: 10,
+      opacity: 0.9,
+      line: { width: 1, color: '#fff' },
+      ...(si >= 0 ? { symbol: rs.map((r) => symbolOf.get(symKey(r)) ?? 'circle') } : {}),
+    },
     cliponaxis: false,
   });
+  // one trace per symbol value inside a colour group (legend: "<colour> · <symbol>")
+  const bySymbol = (rs: Row[], prefix: string): [string, Row[]][] =>
+    si >= 0
+      ? [...groupBy(rs, si)].map(([s, g]) => [prefix ? `${prefix} · ${s}` : s, g])
+      : [[prefix, rs]];
 
   const traces: Trace[] = [];
   if (ci >= 0 && isNumericColumn(rows, ci)) {
@@ -192,14 +213,19 @@ export function buildPcaFigure(panel: PlotPanel, data: PanelData): Figure {
       colorbar: { title: { text: panel.color?.label || colourField }, thickness: 12 },
     };
     traces.push(t);
-  } else if (ci >= 0) {
+  } else if (ci >= 0 || si >= 0) {
     const palette = panel.color?.palette ?? {};
     let n = 0;
-    for (const [name, rs] of groupBy(rows, ci)) {
-      const t = trace(rs);
-      t.name = name;
-      t.marker = { ...(t.marker as object), color: palette[name] ?? COLORWAY[n++ % COLORWAY.length] };
-      traces.push(t);
+    const colourGroups: [string, Row[]][] = ci >= 0 ? [...groupBy(rows, ci)] : [['', rows]];
+    for (const [cname, crs] of colourGroups) {
+      const colour = ci >= 0 ? (palette[cname] ?? COLORWAY[n++ % COLORWAY.length]) : COLORWAY[0];
+      for (const [name, rs] of bySymbol(crs, cname)) {
+        const t = trace(rs);
+        t.name = name;
+        t.legendgroup = cname;
+        t.marker = { ...(t.marker as object), color: colour };
+        traces.push(t);
+      }
     }
     layout.showlegend = true;
     layout.margin = { l: 56, r: 16, t: 28, b: 48 };

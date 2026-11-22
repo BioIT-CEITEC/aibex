@@ -75,8 +75,9 @@ contrast names (`ADAR2_KO_vs_WT_pval`, …) that no longer exist – this part w
 TSVs – the inputs are small, ~65 MB in total). Usage: `uv run scripts/convert_adar2.py --raw <raw/adar2-editing>`.
 
 ### `samples.tsv`
-`sample, genotype (ADAR|WT), group (PER|PL), replicate` – 19 rows, order WT then ADAR. Column named `genotype` so demo
-prompt 3 ("grouped by genotype") works literally.
+`sample, genotype (ADAR|WT), treatment (perampanel|placebo), replicate` – 19 rows, order WT then ADAR. Column named
+`genotype` so demo prompt 3 ("grouped by genotype") works literally. (Planned as `group (PER|PL)`; renamed in T35
+after Q-b.)
 
 ### `de` (key `gene_id`, 33 513 rows)
 From `ADAR_vs_WT_DESeq2.tsv`: `gene_id` (= `Ensembl_Id`), `gene_name`, `biotype`, `baseMean`, `log2FoldChange`,
@@ -171,6 +172,14 @@ any panel highlights its sites. To draw per-site plots without a join, `editing`
 Visual check on the real data (opt-in e2e, data stay outside the repo):
 `make e2e E2E_REAL_DATA=<AIBEX_DATA_DIR>` runs only `frontend/e2e/real-*.spec.ts` and writes
 `logs/screens/T32-adar2-*.png`.
+
+## 6c. T33 answers applied (T35)
+- `samples.tsv`: `treatment` = `perampanel` (prefix `PER`) / `placebo` (prefix `PL`); sample names unchanged.
+- Data values stay `ADAR` / `WT`; bundle, table and column descriptions say "ADAR2 knockout (Adarb1 mutant)", and
+  the default view's titles, axis labels and descriptions say "ADAR2-KO vs WT".
+- PCA: colour = genotype (WT blue, ADAR red), marker shape = treatment, via the new pca-only spec field
+  `symbol: {"field": <samples.tsv column>}` (docs/spec-format.md). Treatment is also available to heatmap
+  `group_by` and to the LLM as a samples.tsv column.
 
 ## 7. Questions for Vojta (T33) – answered 2026-11-22
 Source for Q-a/Q-b: the submitted manuscript Lacovich et al. (in the raw folder, not in git).

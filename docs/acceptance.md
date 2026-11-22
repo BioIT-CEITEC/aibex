@@ -53,6 +53,7 @@ Acceptance tests of phases not yet implemented fail – that is expected. A phas
 | A3.1 | `scripts/convert_adar2.py` writes a complete bundle (ids, modalities, organism, keys, descriptions, links) | `test_bundle_manifest_complete` |
 | A3.2 | The link between editing sites and genes joins real rows | `test_schema_and_link_join` |
 | A3.3 | Default view shows both modalities and validates | `test_default_view_combines_modalities` |
+| A3.5 | Samples carry genotype and treatment (T33 answers); the default PCA shows genotype by colour and treatment by marker shape; UI wording "ADAR2-KO vs WT" | `test_samples_genotype_and_treatment` |
 | A3.4 | No ADAR2/real data files that git could commit (tracked or untracked-not-ignored) | `test_raw_data_not_in_repo` |
 | M3 | Bundle layout and preprocessing assumptions written to `docs/adar2-notes.md` for Vojta to confirm; demo prompt 4 works | manual |
 

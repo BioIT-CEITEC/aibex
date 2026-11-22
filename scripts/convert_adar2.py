@@ -44,6 +44,8 @@ import yaml
 NUM, DEN = "ADAR", "WT"  # contrast (Q10): ADAR vs WT in both modalities
 HIGH_CONFIDENCE_MIN_EDITED = 100  # R: val_editing_sites_table_filtered.xlsx = sum_edit_counts > 100
 REGION = {"E": "exon", "I": "intron"}
+TREATMENT = {"PER": "perampanel", "PL": "placebo"}  # sample-name prefix → treatment (T33, Q-b)
+KO = "ADAR2-KO"  # UI wording for the data value ADAR (T33, Q-a)
 
 
 def default_data_dir() -> Path:
@@ -56,19 +58,24 @@ def log(msg: str) -> None:
 
 # ---------------------------------------------------------------------------------------------------------- samples
 def read_samples(raw: Path) -> pl.DataFrame:
-    """samples.tsv: sample, genotype, group, replicate – WT first, then ADAR (each by group, sample)."""
+    """samples.tsv: sample, genotype, treatment, replicate – WT first, then ADAR (each by treatment, sample).
+
+    The sample-name prefix is the treatment of dams/pups (T33, Q-b): PER = perampanel, PL = placebo.
+    """
     d = pl.read_csv(raw / "input_files" / "DE_experiment_design.tsv", separator="\t", infer_schema_length=0)
     s = d.select(
         pl.col("sample_name").alias("sample"),
         pl.col("condition").alias("genotype"),
-        pl.col("sample_name").str.extract(r"^([A-Za-z]+)", 1).alias("group"),
+        pl.col("sample_name").str.extract(r"^([A-Za-z]+)", 1).replace_strict(TREATMENT, default=None).alias("treatment"),
         pl.col("replicate"),
     )
     bad = set(s["genotype"]) - {NUM, DEN}
     if bad:
         raise SystemExit(f"unexpected conditions in the design: {sorted(bad)}")
+    if s["treatment"].null_count():
+        raise SystemExit(f"sample names without a known treatment prefix ({', '.join(TREATMENT)})")
     order = pl.when(pl.col("genotype") == DEN).then(0).otherwise(1)
-    return s.sort(order, "group", "sample")
+    return s.sort(order, "treatment", "sample")
 
 
 # --------------------------------------------------------------------------------------------------------- de/counts
@@ -251,15 +258,17 @@ def gene_editing(editing: pl.DataFrame) -> pl.DataFrame:
 # ------------------------------------------------------------------------------------------------------ bundle.yaml
 def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dict:
     f, s, i, b = {"type": "float"}, {"type": "string"}, {"type": "int"}, {"type": "bool"}
-    adar = "ADAR (ADAR2-deficient, as labelled in the data)"
     return {
         "id": "adar2-editing",
-        "title": "ADAR2 mouse – RNA-seq and RNA editing (ADAR vs WT)",
+        "title": f"ADAR2 mouse – RNA-seq and RNA editing ({KO} vs WT)",
         "description": (
-            "Published mouse RNA-seq data: differential expression (DESeq2) and A-to-I RNA editing at known editing "
-            f"sites, {n_samples} samples, {adar} vs WT. Editing levels are pooled over the samples of each "
-            f"condition; {n_sites} sites in canonical exons of DE genes with >= {min_cov} reads in both conditions. "
-            "Converted by scripts/convert_adar2.py (see docs/adar2-notes.md for the assumptions)."
+            "Published mouse RNA-seq data (Lacovich et al.): differential expression (DESeq2) and A-to-I RNA editing "
+            f"at known editing sites in P14 pup brains, {n_samples} samples. Genotype: ADAR = ADAR2 knockout (Adarb1 "
+            "mutant), WT = wild-type littermates. Treatment of dams/pups: perampanel (AMPA receptor antagonist) or "
+            "placebo (samples.tsv column treatment; sample-name prefix PER / PL). The ADAR vs WT contrast is pooled "
+            "over both treatments. Editing levels are pooled over the samples of each genotype; "
+            f"{n_sites} sites in canonical exons of DE genes with >= {min_cov} reads in both genotypes. "
+            "Converted by scripts/convert_adar2.py (see docs/adar2-notes.md)."
         ),
         "organism": "Mus musculus",
         "genome": "GRCm38",
@@ -271,8 +280,9 @@ def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dic
             "de": {
                 "file": "tables/de.parquet",
                 "description": (
-                    f"DESeq2 results ADAR vs WT, one row per gene ({n_genes} genes), with per-gene editing summaries "
-                    "over the gene's editing sites"
+                    f"DESeq2 results ADAR2 knockout (Adarb1 mutant, data value ADAR) vs WT, pooled over both "
+                    f"treatments, one row per gene ({n_genes} genes), with per-gene editing summaries over the "
+                    "gene's editing sites"
                 ),
                 "key": "gene_id",
                 "columns": {
@@ -280,7 +290,7 @@ def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dic
                     "gene_name": {**s, "description": "gene symbol (not unique for a few symbols)"},
                     "biotype": {**s, "description": "Ensembl gene biotype"},
                     "baseMean": {**f, "description": "mean of normalised counts over all samples"},
-                    "log2FoldChange": {**f, "description": "log2 fold change, ADAR vs WT (> 0 = higher in ADAR)"},
+                    "log2FoldChange": {**f, "description": "log2 fold change, ADAR2-KO vs WT (> 0 = higher in ADAR2-KO)"},
                     "lfcSE": {**f, "description": "standard error of log2FoldChange"},
                     "stat": {**f, "description": "Wald statistic"},
                     "pvalue": {**f, "description": "Wald test p-value"},
@@ -301,8 +311,8 @@ def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dic
             "editing": {
                 "file": "tables/editing.parquet",
                 "description": (
-                    f"A-to-I editing per site, one row per site ({n_sites} sites), pooled reads per condition, "
-                    "ADAR vs WT"
+                    f"A-to-I editing per site, one row per site ({n_sites} sites), pooled reads per genotype, "
+                    "ADAR2 knockout (Adarb1 mutant, data value ADAR) vs WT"
                 ),
                 "key": "site_id",
                 "columns": {
@@ -325,7 +335,7 @@ def bundle_yaml(n_genes: int, n_sites: int, n_samples: int, min_cov: int) -> dic
                     "edited_adar": {**i, "description": "edited (G) reads, summed over ADAR samples"},
                     "edit_wt": {**f, "description": "editing level WT (0-1) = edited_wt / cov_wt"},
                     "edit_adar": {**f, "description": "editing level ADAR (0-1) = edited_adar / cov_adar"},
-                    "delta": {**f, "description": "editing change edit_adar - edit_wt (ADAR vs WT)"},
+                    "delta": {**f, "description": "editing change edit_adar - edit_wt (ADAR2-KO vs WT)"},
                     "high_confidence": {**b, "description": f"more than {HIGH_CONFIDENCE_MIN_EDITED} edited reads over all samples"},
                     "n_samples_covered": {**i, "description": f"samples with coverage > 0 (of {n_samples})"},
                     "gene_log2fc": {**f, "description": "log2FoldChange of the site's gene (copied from de)"},
@@ -364,35 +374,38 @@ def default_view() -> dict:
     diagonal = {"type": "line", "xref": "x", "yref": "y", "x0": 0, "y0": 0, "x1": 1, "y1": 1,
                 "line": {"dash": "dot", "color": "#888888", "width": 1}}
     panels = [
-        {"id": "volcano", "type": "plot", "title": "Volcano: ADAR vs WT (expression)", "table": "de", "kind": "scatter",
-         "x": {"field": "log2FoldChange", "label": "log2 fold change (ADAR vs WT)"},
+        {"id": "volcano", "type": "plot", "title": f"Volcano: {KO} vs WT (expression)", "table": "de",
+         "kind": "scatter",
+         "x": {"field": "log2FoldChange", "label": f"log2 fold change ({KO} vs WT)"},
          "y": {"expr": "-log10(padj)", "label": "-log10 padj"},
          "color": {"expr": sig, "palette": {"significant": "#d62728", "n.s.": grey}},
          "label": {"field": "gene_name", "values": []}},
         {"id": "editing-vs-expression", "type": "plot", "title": "Editing change vs expression change (per site)",
          "description": "Each point is an editing site; x = log2 fold change of its gene, y = editing change "
-                        "ADAR − WT (pooled levels).",
+                        f"{KO} − WT (pooled levels).",
          "table": "editing", "kind": "scatter",
-         "x": {"field": "gene_log2fc", "label": "log2 fold change of the gene"},
-         "y": {"field": "delta", "label": "editing Δ (ADAR − WT)"},
+         "x": {"field": "gene_log2fc", "label": f"log2 fold change of the gene ({KO} vs WT)"},
+         "y": {"field": "delta", "label": f"editing Δ ({KO} − WT)"},
          "color": {"expr": gene_de, "palette": {"gene DE (padj < 0.05)": "#d62728", "gene not DE": grey}},
          "label": {"field": "gene_name", "values": []},
          "plotly": {"layout": {"yaxis": {"zeroline": True}, "xaxis": {"zeroline": True}}}},
-        {"id": "editing-levels", "type": "plot", "title": "Editing level per site: WT vs ADAR",
-         "description": "Pooled editing level per site; points below the diagonal are less edited in ADAR.",
+        {"id": "editing-levels", "type": "plot", "title": f"Editing level per site: WT vs {KO}",
+         "description": f"Pooled editing level per site; points below the diagonal are less edited in {KO}.",
          "table": "editing", "kind": "scatter",
          "x": {"field": "edit_wt", "label": "editing level WT"},
-         "y": {"field": "edit_adar", "label": "editing level ADAR"},
+         "y": {"field": "edit_adar", "label": f"editing level {KO}"},
          "color": {"expr": confident, "palette": {f"> {HIGH_CONFIDENCE_MIN_EDITED} edited reads": "#1f77b4",
                                                   "other": grey}},
          "plotly": {"layout": {"shapes": [diagonal]}}},
         {"id": "pca", "type": "plot", "kind": "pca", "title": "PCA of samples (normalised counts)", "table": "counts",
-         "top_n": 500, "scale": "log1p", "color": {"field": "genotype"}},
+         "description": f"Colour = genotype (ADAR = {KO}), shape = treatment of dams/pups (perampanel / placebo).",
+         "top_n": 500, "scale": "log1p", "color": {"field": "genotype", "palette": {DEN: "#1f77b4", NUM: "#d62728"}},
+         "symbol": {"field": "treatment"}},
         {"id": "edited-genes", "type": "table", "title": "Genes by number of editing sites", "table": "de",
          "columns": ["gene_name", "n_edit_sites", "mean_delta", "max_abs_delta", "edit_wt", "edit_adar",
                      "log2FoldChange", "padj", "baseMean", "gene_id"],
          "sort": [{"field": "n_edit_sites", "dir": "desc"}], "page_size": 15},
-        {"id": "editing-sites", "type": "table", "title": "Editing sites (strongest loss in ADAR first)",
+        {"id": "editing-sites", "type": "table", "title": f"Editing sites (strongest loss in {KO} first)",
          "table": "editing",
          "columns": ["site_id", "gene_name", "exon_number", "region", "edit_wt", "edit_adar", "delta", "cov_wt",
                      "cov_adar", "high_confidence", "gene_log2fc", "gene_padj", "gene_id"],
@@ -405,7 +418,7 @@ def default_view() -> dict:
         layout += [{"i": pid, "x": k * w, "y": r * 9, "w": w, "h": 9} for k, pid in enumerate(ids)]
     return {
         "version": 1,
-        "title": "ADAR2: expression and RNA editing (ADAR vs WT)",
+        "title": f"ADAR2: expression and RNA editing ({KO} vs WT)",
         "bundle": "adar2-editing",
         "theme": {"palette": "default", "dark": False},
         "filters": [],
