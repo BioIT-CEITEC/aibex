@@ -234,6 +234,12 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   `bundle-select`, `panel-<id>`, `filter-<id>` (checkbox), `table-<id>` (rows are `tbody tr`), `chat-input`, `chat-send`,
   `chat-message` (assistant messages), `spec-version` (text = current version number), `history-item`, `undo-button`,
   `redo-button`, `widget-frame-<id>` (the iframe; attribute `sandbox="allow-scripts"` exactly), `error-banner`.
+- Chat panel (T24a, right sidebar): Enter sends (Shift+Enter = newline), one turn at a time. The client reads the SSE
+  stream with `fetch` (`chatStream` in `lib/api.ts`, not `EventSource`, because it is a POST). Each assistant bubble
+  (`chat-message`) shows the turn's tool steps, applied changes (`→ version n: summary`), the reply text and any
+  `error` event; a `spec` event replaces the store spec at once and refreshes the history. User bubbles are
+  `chat-user-message`. A request failure (unreachable, 422) puts the text back into the input. The transcript is view
+  state and is cleared when a new session starts.
 - Toggling a filter checkbox or dragging/resizing a panel sends a patch with `source: "user"` (a new, undoable version).
   Drag/resize (title bar / bottom-right corner) patches only the changed `x/y/w/h` of every moved item, each guarded by
   a `test` on `/layout/<k>/i`; summary `move|resize panel <id> (+n shifted)`.

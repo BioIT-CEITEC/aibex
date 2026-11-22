@@ -161,6 +161,14 @@ export interface SpecVersion {
   version: number;
 }
 
+/** SSE events of `POST /sessions/{sid}/chat` (docs/api.md → "Chat events"). */
+export type ChatEvent =
+  | { type: 'token'; text: string }
+  | { type: 'tool'; name: string; status: 'running' | 'ok' | 'error' | string }
+  | { type: 'spec'; spec: Spec; version: number; summary?: string }
+  | { type: 'error'; message: string }
+  | { type: 'done' };
+
 /** RFC 6902 JSON Patch operation. */
 export type PatchOp =
   | { op: 'add' | 'replace' | 'test'; path: string; value: JsonValue }

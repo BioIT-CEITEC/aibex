@@ -2,13 +2,28 @@
 // The spec is the single source of truth for what the dashboard shows (CLAUDE.md, contract 1); every change goes
 // through the backend (patch/undo/redo) and the store takes the returned spec – it never edits the spec locally.
 import { create } from 'zustand';
-import { api, errorMessage } from '@/lib/api';
-import type { BundleInfo, HistoryEntry, PatchOp, Spec, SpecVersion } from '@/lib/types';
+import { api, chatStream, errorMessage } from '@/lib/api';
+import type { BundleInfo, ChatEvent, HistoryEntry, PatchOp, Spec, SpecVersion } from '@/lib/types';
 
 export interface AppError {
   message: string;
   /** Re-runs the failed action (shown as "Retry" in the banner). */
   retry?: () => void;
+}
+
+/** One chat bubble. Assistant messages collect the streamed events of one turn (T24a). */
+export interface ChatMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  text: string;
+  /** Tool calls of this turn, in order, with their latest status. */
+  tools: { name: string; status: string }[];
+  /** Spec changes applied in this turn (`spec` events). */
+  changes: { version: number; summary?: string }[];
+  /** Error message of this turn (`error` event or a failed request). */
+  error?: string;
+  /** True while the turn is still streaming. */
+  pending?: boolean;
 }
 
 interface AppState {
@@ -28,7 +43,16 @@ interface AppState {
    * (no new version); cleared when a new session starts.
    */
   selection: string[];
+  /** Chat transcript of the current session (view state; the backend keeps its own copy for the LLM context). */
+  chat: ChatMessage[];
+  /** True while a chat turn is streaming. */
+  chatBusy: boolean;
 
+  /**
+   * Send a chat message (SSE); `spec` events update the dashboard as they arrive. Returns false when the request
+   * itself failed (the caller may keep the text for a retry); LLM-side errors still count as sent.
+   */
+  sendChat: (message: string) => Promise<boolean>;
   /** Replace the selection, or toggle `keys` in/out of it (shift/ctrl/cmd-click). */
   select: (keys: string[], mode?: 'replace' | 'toggle') => void;
   /** Load the bundle list and start a session for `requested` (or the first bundle). */
@@ -47,6 +71,9 @@ interface AppState {
 // Each bootstrap/selectBundle call gets a number; results of older calls are dropped (StrictMode runs effects
 // twice, and a user may switch bundles quickly).
 let sessionSeq = 0;
+let chatSeq = 0;
+// The chat stream of the current session; aborted when a new session starts.
+let chatAbort: AbortController | null = null;
 
 function setBundleParam(bundleId: string) {
   const url = new URL(window.location.href);
@@ -58,7 +85,9 @@ function setBundleParam(bundleId: string) {
 export const useAppStore = create<AppState>()((set, get) => {
   const startSession = async (bundleId: string) => {
     const seq = ++sessionSeq;
-    set({ loading: true, error: null, bundleId, selection: [] });
+    chatAbort?.abort();
+    chatAbort = null;
+    set({ loading: true, error: null, bundleId, selection: [], chat: [], chatBusy: false });
     try {
       const created = await api.createSession(bundleId);
       if (seq !== sessionSeq) return;
@@ -123,6 +152,72 @@ export const useAppStore = create<AppState>()((set, get) => {
     busy: false,
     error: null,
     selection: [],
+    chat: [],
+    chatBusy: false,
+
+    sendChat: async (message) => {
+      const sid = get().sessionId;
+      const text = message.trim();
+      if (!sid || !text || get().chatBusy) return false;
+      const userMsg: ChatMessage = { id: ++chatSeq, role: 'user', text, tools: [], changes: [] };
+      const replyId = ++chatSeq;
+      const reply: ChatMessage = { id: replyId, role: 'assistant', text: '', tools: [], changes: [], pending: true };
+      const abort = new AbortController();
+      chatAbort = abort;
+      set({ chat: [...get().chat, userMsg, reply], chatBusy: true });
+
+      const update = (fn: (m: ChatMessage) => ChatMessage) => {
+        if (get().sessionId !== sid) return;
+        set({ chat: get().chat.map((m) => (m.id === replyId ? fn(m) : m)) });
+      };
+      const onEvent = (ev: ChatEvent) => {
+        if (get().sessionId !== sid) return;
+        switch (ev.type) {
+          case 'token':
+            update((m) => ({ ...m, text: m.text + ev.text }));
+            break;
+          case 'tool':
+            update((m) => {
+              const tools = [...m.tools];
+              const last = tools[tools.length - 1];
+              // `running` then `ok`/`error` for the same call → one entry with the final status
+              if (ev.status !== 'running' && last && last.name === ev.name && last.status === 'running') {
+                tools[tools.length - 1] = { name: ev.name, status: ev.status };
+              } else tools.push({ name: ev.name, status: ev.status });
+              return { ...m, tools };
+            });
+            break;
+          case 'spec':
+            update((m) => ({ ...m, changes: [...m.changes, { version: ev.version, summary: ev.summary }] }));
+            void get().receiveSpec({ spec: ev.spec, version: ev.version });
+            break;
+          case 'error':
+            update((m) => ({ ...m, error: m.error ? `${m.error}; ${ev.message}` : ev.message }));
+            break;
+          case 'done':
+            update((m) => ({ ...m, pending: false }));
+            break;
+        }
+      };
+
+      let ok = true;
+      try {
+        await chatStream(sid, text, onEvent, abort.signal);
+      } catch (e) {
+        if (abort.signal.aborted) return false;
+        ok = false;
+        update((m) => ({ ...m, error: `Chat request failed: ${errorMessage(e)}` }));
+      }
+      if (chatAbort === abort) chatAbort = null;
+      update((m) => ({
+        ...m,
+        pending: false,
+        // a stream that ended without any reply (e.g. connection cut) must still say something
+        error: m.error ?? (!m.text && m.changes.length === 0 ? 'No reply from the assistant.' : undefined),
+      }));
+      if (get().sessionId === sid) set({ chatBusy: false });
+      return ok;
+    },
 
     select: (keys, mode = 'replace') => {
       const unique = [...new Set(keys)];

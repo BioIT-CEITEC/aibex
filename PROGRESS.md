@@ -39,7 +39,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T22a Tools as plain functions: `describe_bundle` (schema + summary stats, no rows), `query_data` (≤200 rows), `update_view`, `undo_view`; unit tests (after: T13b, T15)
 - [x] T22b Chat loop (max 8 calls, give up after 2 failures, fallback parsing, events) + `POST /sessions/{sid}/chat?stream=false` [A2.2, A2.3] (after: T21b, T22a)
 - [x] T23 SSE streaming for `/chat` + system prompt (spec-format summary, panel index, rules) [A2.4] (after: T22b)
-- [ ] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
+- [x] T24a Frontend chat panel with streaming, `chat-input`/`chat-send`/`chat-message`, spec refresh on `spec` events [E2.1, E2.4] (after: T23, T17b)
 - [ ] T24b History list (`history-item`), undo/redo buttons, version indicator [E2.2, E2.3] (after: T24a, T17d)
 - [ ] T25 Live check with the real model (`make accept-live`, ≤3 runs, A2.5); tune the system prompt; results + latency in the Log (after: T23)
 - [ ] T26 M2: demo prompts 1–3 and 6 with the real model on the ADAR2 bundle; latency in the Log – Vojta (after: T24b, T25, T32)
@@ -70,6 +70,18 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T24a · done · `ChatPanel` (right sidebar, sticky): textarea `chat-input` (Enter sends), `chat-send`,
+  user bubbles `chat-user-message`, assistant bubbles `chat-message` with tool steps (running → ✓/✕), applied
+  changes (`→ version n: summary`), reply text, errors. `chatStream` in `lib/api.ts` parses the POST SSE stream with
+  fetch + `TextDecoderStream` (frames split on blank lines, unknown/malformed frames dropped); store `sendChat`
+  (one turn at a time, `spec` events → `receiveSpec` at once, aborted + cleared on a new session, request failure →
+  error in the bubble and the text back in the input, empty stream → "No reply from the assistant."). `ChatEvent`
+  type. docs/api.md frontend conventions updated. Checks: `make test` 395 pass + typecheck/lint clean; phase-1
+  acceptance 34 pass; phase-2 16/16 pass; `make e2e`: 14 pass, E2.2 + E2.4 pass; E2.1 fails only on `history-item`
+  and E2.3 on `undo-button` (both T24b), E4.1 (Phase 4) as before. Screenshot of the label prompt (labels on the
+  volcano, chat bubble with version 1): `frontend/test-results/chat-E2-1-…-retry1/test-failed-1.png` – copying it
+  to `logs/screens/` was refused by the runner permissions (`cp`/`mkdir`); E2.1 writes `logs/screens/E2.1-label.png`
+  itself once T24b lands. No new dependencies.
 - 2026-11-22 · T23 · done · New `aibex/llm/prompts.py`: full `SYSTEM_PROMPT` (role, tools, spec-format summary incl.
   filters/plot/pca/heatmap/table/text, expr grammar, layout rules, plotly log-axis/opacity recipes, rules: schema
   columns only, minimal single patch, never invent numbers, ask when unclear, short plain answer, JSON fallback) +

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { BundleSelect } from '@/components/BundleSelect';
+import { ChatPanel } from '@/components/ChatPanel';
 import { Dashboard } from '@/components/Dashboard';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { FiltersBar } from '@/components/FiltersBar';
@@ -7,7 +8,7 @@ import { SelectionBar } from '@/components/SelectionBar';
 import { useAppStore } from '@/store';
 
 // App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
-// The main area is the panel grid (T17a); chat (T24a) and history/undo (T24b) plug in next to it.
+// The main area is the panel grid (T17a) with the chat panel (T24a) on the right; history/undo (T24b) come next.
 export default function App() {
   const bootstrap = useAppStore((s) => s.bootstrap);
   const spec = useAppStore((s) => s.spec);
@@ -32,16 +33,19 @@ export default function App() {
         </div>
       </header>
       <ErrorBanner />
-      <main className="flex-1 p-4">
-        {loading && !spec ? (
-          <p className="text-sm text-muted-foreground">Opening bundle…</p>
-        ) : spec ? (
-          <>
-            <FiltersBar filters={spec.filters ?? []} />
-            <Dashboard spec={spec} />
-          </>
-        ) : null}
-      </main>
+      <div className="flex flex-1 items-start">
+        <main className="min-w-0 flex-1 p-4">
+          {loading && !spec ? (
+            <p className="text-sm text-muted-foreground">Opening bundle…</p>
+          ) : spec ? (
+            <>
+              <FiltersBar filters={spec.filters ?? []} />
+              <Dashboard spec={spec} />
+            </>
+          ) : null}
+        </main>
+        <ChatPanel />
+      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 // (the Vite dev server proxies it to the backend; in production uvicorn serves both).
 import type {
   BundleInfo,
+  ChatEvent,
   Health,
   PanelData,
   PatchOp,
@@ -88,6 +89,72 @@ export const api = {
       selection ? { panel_id: panelId, selection } : { panel_id: panelId },
     ),
 };
+
+const CHAT_EVENT_TYPES = new Set(['token', 'tool', 'spec', 'error', 'done']);
+
+/** Parse one SSE frame (`event: <type>\ndata: <json>`); unknown or malformed frames give null. */
+export function parseSseFrame(frame: string): ChatEvent | null {
+  let type = 'message';
+  const data: string[] = [];
+  for (const line of frame.split('\n')) {
+    if (line.startsWith('event:')) type = line.slice(6).trim();
+    else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+  }
+  if (!CHAT_EVENT_TYPES.has(type)) return null;
+  let payload: unknown = {};
+  if (data.length) {
+    try {
+      payload = JSON.parse(data.join('\n'));
+    } catch {
+      return null;
+    }
+  }
+  if (!payload || typeof payload !== 'object') return null;
+  return { ...(payload as object), type } as ChatEvent;
+}
+
+/**
+ * `POST /sessions/{sid}/chat` as an SSE stream: calls `onEvent` for every event as it arrives. Resolves when the
+ * stream ends; throws `ApiError` for HTTP errors (e.g. 422 for an empty/too long message) or a lost connection.
+ */
+export async function chatStream(
+  sid: string,
+  message: string,
+  onEvent: (event: ChatEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/sessions/${enc(sid)}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify({ message }),
+      signal,
+    });
+  } catch (e) {
+    throw new ApiError(0, `backend unreachable (${e instanceof Error ? e.message : String(e)})`);
+  }
+  if (!res.ok || !res.body) {
+    const data: unknown = await res.json().catch(() => null);
+    const { message: msg, errors } = detailMessage(data);
+    throw new ApiError(res.status, msg ?? `chat failed: HTTP ${res.status}`, errors);
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value.replace(/\r\n/g, '\n');
+    let cut: number;
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const event = parseSseFrame(buffer.slice(0, cut));
+      buffer = buffer.slice(cut + 2);
+      if (event) onEvent(event);
+    }
+  }
+  const tail = buffer.trim() ? parseSseFrame(buffer) : null;
+  if (tail) onEvent(tail);
+}
 
 export function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
