@@ -64,7 +64,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 ## Phase 5 – polish
 - [x] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
 - [x] T51 Saved views per bundle: `/bundles/{id}/views`, `/sessions/{sid}/load-view`, UI save/load; unit tests [P5.2] (after: T15, T24b)
-- [ ] T52 Demo-script panel with the 6 demo prompts, click to send [P5.3] (after: T24a)
+- [x] T52 Demo-script panel with the 6 demo prompts, click to send [P5.3] (after: T24a)
 - [ ] T53 Theme + palette pass (light/dark) [P5.4]; final screenshots of every demo prompt into `logs/screens/` (after: T50, T52)
 - [ ] T54 Production build check: `npm run build`, uvicorn serves `frontend/dist` at `/`, health ok; note any deploy change needed (after: T53)
 - [ ] T55 Deploy and run all demo prompts on the public URL [P5.5] – Vojta (after: T54)
@@ -72,6 +72,18 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T52 · **done (P5.3)** · New collapsible "Demo script" section in the chat column, between History and
+  Assistant (`demo-script`, buttons `demo-prompt-1…6`). It lists the 6 demo prompts from docs/roadmap.md
+  (`frontend/src/lib/demoPrompts.ts`). A click sends the prompt as a chat message, the same as typing it; the chat
+  input is left alone. The buttons are disabled while a chat turn runs or before a session exists. The prompts are
+  fixed demo texts for the ADAR2 bundle (4 and 5 need the editing data), not column names the UI uses. Small additive
+  FakeProvider rule, so prompt 6 also works offline: `undo the last [<n> | one…five] change(s)` → `undo_view` with n
+  steps (fake.py, docs/api.md, unit test cases). With the FakeProvider, prompts 1–5 give "no rule matched" or a
+  wrong label patch; only the real model handles them. New `e2e/demo-script.spec.ts` (2 tests: the list; two changes,
+  then prompt 6 undoes both). Screenshots: `logs/screens/P5.3-{demo-script,demo-prompt-sent}.png`, checked. Note for
+  T53: at 1440×900 the history, demo script and chat share the column, so the chat list gets short once the history
+  grows. The demo script can be collapsed. Checks: `make test` 489 pass + ruff/typecheck/lint clean; `make accept`
+  67/67; `make e2e` 33/33. No new dependencies.
 - 2026-11-22 · T35 · **done (A3.5)** · Applied the T33 answers in `scripts/convert_adar2.py` and re-ran it (same
   numbers: 33 513 genes, 4 024 sites). `samples.tsv` column `group` is now `treatment` (`perampanel`/`placebo`; an
   unknown prefix stops the converter). Sample names and the data values `ADAR`/`WT` are unchanged. Bundle, table and

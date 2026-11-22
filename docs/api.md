@@ -36,6 +36,7 @@ class LLMProvider(Protocol):
   - `label <G1>[, <G2> ...]` → `update_view` replacing `label.values` of the first `plot` panel of kind `scatter`
   - `padj below <x>` → `update_view` adding filter `{"id": "padj-lt", "table": <table of first scatter>, "field": "padj", "op": "<", "value": x, "enabled": true}`
   - `undo` / `undo <n>` → `undo_view` with steps n (default 1)
+  - `undo the last [<n> | one…five] change(s)` → `undo_view` with steps n (default 1); demo prompt 6 (T52)
   - `add widget` → `create_widget` id `row-count`, one input `{"name": "rows", "sql": "SELECT * FROM <first table of the bundle> LIMIT 50"}`, a tiny TSX widget showing the row count of that input
   - anything else → text reply "FakeProvider: no rule matched", no change
   - after a tool result it answers with a short text ("FakeProvider: done") so the loop ends.

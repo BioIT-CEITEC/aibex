@@ -4,6 +4,7 @@ Rules on the last user message (case-insensitive), docs/api.md → "LLM provider
 - `label <G1>[, <G2> ...]` → `update_view` replacing `label.values` of the first scatter plot panel
 - `padj below <x>`         → `update_view` adding (or replacing) filter `padj-lt` on the first scatter's table
 - `undo` / `undo <n>`      → `undo_view` with `steps` n (default 1)
+- `undo the last [<n>|two…five] change(s)` → `undo_view` with `steps` n (demo prompt 6)
 - `add widget`             → `create_widget` `row-count` (one input over the bundle's first table)
 - anything else            → text "FakeProvider: no rule matched"
 - after a tool result      → text "FakeProvider: done" (so the chat loop ends)
@@ -27,6 +28,11 @@ DONE = "FakeProvider: done"
 _LABEL_RE = re.compile(r"\blabel\s+(.+)", re.IGNORECASE | re.DOTALL)
 _PADJ_RE = re.compile(r"\bpadj\s+below\s+([0-9]*\.?[0-9]+(?:e[-+]?[0-9]+)?)", re.IGNORECASE)
 _UNDO_RE = re.compile(r"^\W*undo(?:\s+(\d+))?\W*$", re.IGNORECASE)
+# demo prompt 6 (docs/roadmap.md): "Undo the last two changes."
+_NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+_UNDO_LAST_RE = re.compile(
+    r"^\W*undo\s+the\s+last(?:\s+(\d+|one|two|three|four|five))?\s+changes?\W*$", re.IGNORECASE
+)
 _WIDGET_RE = re.compile(r"\badd\s+(?:a\s+)?widget\b", re.IGNORECASE)
 _SPLIT_RE = re.compile(r"\s*(?:,|;|\band\b|\s)\s*", re.IGNORECASE)
 
@@ -131,6 +137,9 @@ class FakeProvider:
     def _rule(self, prompt: str, messages: list[dict]) -> LLMResponse:
         if m := _UNDO_RE.match(prompt):
             return self._call("undo_view", {"steps": int(m.group(1) or 1)})
+        if m := _UNDO_LAST_RE.match(prompt):
+            n = (m.group(1) or "1").lower()
+            return self._call("undo_view", {"steps": int(n) if n.isdigit() else _NUMBER_WORDS[n]})
         if _WIDGET_RE.search(prompt):
             return self._widget(messages)
         if m := _PADJ_RE.search(prompt):

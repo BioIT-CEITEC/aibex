@@ -105,7 +105,17 @@ def test_padj_rule_twice_replaces_filter(spec, bundle):
     assert len(_apply(bundle, spec2, call2)["filters"]) == 1
 
 
-@pytest.mark.parametrize("prompt,steps", [("undo", 1), ("Undo 3", 3), ("  UNDO!", 1)])
+@pytest.mark.parametrize(
+    "prompt,steps",
+    [
+        ("undo", 1),
+        ("Undo 3", 3),
+        ("  UNDO!", 1),
+        ("Undo the last two changes.", 2),  # demo prompt 6
+        ("undo the last 3 changes", 3),
+        ("undo the last change", 1),
+    ],
+)
 def test_undo_rule(spec, bundle, prompt, steps):
     (call,) = _ask(spec, bundle, prompt).tool_calls
     assert call.name == "undo_view" and call.arguments == {"steps": steps}
