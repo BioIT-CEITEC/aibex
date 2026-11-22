@@ -47,10 +47,10 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Phase 3 – ADAR2
 - [x] T29 Put the ADAR2 results at `$AIBEX_DATA_DIR/../raw/adar2-editing`: expression results (DE table, RSEM), editing result tables/counts, and the R analysis code – Vojta
-- [ ] T30 Inspect `raw/adar2-editing` freely (data are published): read the R code to learn the filters/normalisation, map files → bundle tables; write assumptions, file sizes and the planned preprocessing to `docs/adar2-notes.md` (in git, no data rows beyond a few examples); do not copy raw files (after: T29)
+- [x] T30 Inspect `raw/adar2-editing` freely (data are published): read the R code to learn the filters/normalisation, map files → bundle tables; write assumptions, file sizes and the planned preprocessing to `docs/adar2-notes.md` (in git, no data rows beyond a few examples); do not copy raw files (after: T29)
 - [ ] T31 `scripts/convert_adar2.py` (polars, lazy/streaming for big files) → `$AIBEX_DATA_DIR/adar2-editing/bundle.yaml` + tables: `de`, `counts` (matrix), `editing` (only the realistically edited sites, ~4000, filtered as in the R code), and precomputed per-gene editing columns in `de` (`n_edit_sites`, `mean_delta`, `max_abs_delta`); contrast ADAR vs WT in both modalities (Q10); no genome needed [A3.1, A3.2] (after: T30, T11)
 - [ ] T32 ADAR2 default view combining expression and editing (editing Δ vs log2FC, sites per gene, linked selection) [A3.3, A3.4] (after: T31, T14)
-- [ ] T33 M3: confirm the assumptions in `data/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
+- [ ] T33 M3: confirm the assumptions in `docs/adar2-notes.md`; demo prompt 4 works – Vojta (after: T32, T24b)
 
 ## Phase 4 – Level 2 widgets
 - [ ] T40a Widget validation (code size/blocklist, input SQL read-only) + `panel-data` input resolution with `$selected` as a bound parameter [A4.2, A4.3] (after: T13b, T15b)
@@ -70,6 +70,22 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T30 · done · New `docs/adar2-notes.md`: file inventory with sizes (used / not used), what the R code
+  does, reproduction check, samples/contrast, planned bundle (`samples.tsv`, `de`, `counts`, `editing`, optional
+  `editing_levels`) with column definitions, a few example rows, questions Q-a…Q-e for T33. Key facts: the
+  known-sites part of `proces_all_samples_editing_new.R` is reproducible from the raw per-sample TSVs
+  (`edit = Count_C + Count_G`, `cov = Good_depth`, 19 design samples, `PER01RE` dropped); R double-counts sums of
+  sites in two overlapping genes (converter will not). The cluster/Alu part needs files that are not provided (and
+  old contrast names) – not used. The GTF is missing, so gene annotation of sites comes from
+  `val_editing_sites_table.xlsx` (4 372 unique sites); DE names carry `__ENSMUSG…` suffixes on duplicated symbols.
+  Proposed site filter: xlsx set + pooled coverage ≥ 10 in both ADAR and WT → **4 024 sites** (≈ Q7's ~4000);
+  `delta = edit_adar − edit_wt` (pooled ratios). Editing is lower in `ADAR` (0.177 vs 0.238) → assumed
+  ADAR2-deficient, labels kept as in the data (Q-a). `samples.tsv` gets a `genotype` column for demo prompt 3.
+  Fixed the T33 path (`data/` → `docs/adar2-notes.md`). No raw files copied; inspection via `uv run --no-project
+  --with polars --with fastexcel` one-liners (fastexcel needed: openpyxl fails on these R-written xlsx files) – T31
+  will need polars + fastexcel as PEP 723 deps of the converter only (no backend dependency). Checks: `make test`
+  396 pass + lint clean; phase-1 34 pass; phase-2 16/16; phase-3 `test_raw_data_not_in_repo` pass, 3 skip (no
+  bundle yet). Not a UI task. Next: T31.
 - 2026-11-22 · T25 · done · `make accept-live` 3 runs, **3/3 pass** (A2.5 needs ≥2/3) with `LLM_MODEL_FAST=agentic` on
   the e-INFRA service: latency per chat turn 7.6 s, 7.6 s, 5.6 s (non-stream, whole turn incl. 2 model calls). Every
   run: `query_data` (checks the genes exist) → one `update_view` (label.values) → short reply; no validation errors,
