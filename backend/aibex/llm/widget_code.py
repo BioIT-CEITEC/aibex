@@ -39,16 +39,20 @@ bioinformatics app. Reply with ONLY the code in one ```tsx code block, no explan
 Runtime contract:
 - `export default function Widget({ data, selection, onSelect })`.
 - `data.inputs.<name>` is {columns: string[], rows: any[][]} – rows are arrays in column order; look up column \
-positions with columns.indexOf("<column>"). Inputs can be empty (0 rows), e.g. when nothing is selected: then render \
-a short hint such as "Select a gene in a plot or table".
+positions with columns.indexOf("<column>"). This holds for one-row inputs too: \
+`row[cols.indexOf("gene_name")]`, never `row.gene_name`. Inputs can be empty (0 rows), e.g. when nothing is \
+selected: then render a short hint such as "Select a gene in a plot or table".
 - `selection` is the list of selected keys (may be empty); call onSelect([key]) to select.
 - `React` and `Plotly` are globals. Do not import anything else; there is no network (no fetch, XMLHttpRequest, \
 WebSocket, localStorage, cookies, eval, new Function, window.open). Hooks: React.useState, React.useEffect, React.useRef.
 - For charts use Plotly.react(divRef.current, traces, layout, {displayModeBar: false, responsive: true}) inside \
 React.useEffect, on a <div ref={divRef} style={{width: "100%", height: "100%"}} />. Plotly is the basic bundle: \
 scatter, bar and pie traces only.
-- The widget fills its panel (style the root with width/height 100%). Keep it short, readable and robust: no \
-crash on nulls or missing columns."""
+- Trace x and y are flat arrays of numbers or strings, never arrays of arrays. To draw many line segments (e.g. \
+stems or connectors) in one trace, use flat arrays with null between segments: x [p1, p1, null, p2, p2, null]. \
+Prefer one plot; for stacked subplots give every axis a domain and an anchor (yaxis2: {domain, anchor: "x"}).
+- The widget fills its panel (style the root with width/height 100%). Keep it short (about 150 lines at most), \
+readable and robust: no crash on nulls or missing columns."""
 
 
 class WidgetCodeError(Exception):

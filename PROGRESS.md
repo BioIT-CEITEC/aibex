@@ -58,7 +58,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
 - [x] T41a Iframe runtime: srcdoc with CSP + inlined React and Plotly (minified dist), postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
 - [x] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
-- [~] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
+- [x] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
 
 ## Phase 5 – polish
 - [ ] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
@@ -71,6 +71,23 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T42 · **done (M4 visual check)** · Live run 1/3 (`-k widget_editing`): passed in 84 s and saved
+  the widget. New opt-in real-data e2e `e2e/real-adar2-widget.spec.ts`: adds the saved widget to an ADAR2 session via
+  `/patch`, clicks the top edited gene (Gla, 44 sites), and checks the sandbox, that Plotly drew points, and that there
+  is no widget error. Screenshots: `logs/screens/T42-adar2-widget{,-page}.png`. **The first live widget rendered with
+  no runtime error, but it was wrong:** the header showed "n/a", because the code read the one-row `gene` input as an
+  object (`gene.gene_name`). The plot was empty, because the stem and connector traces passed arrays of arrays as x/y.
+  The code was also about 400 lines long. Fix: the widget-code prompt (`WIDGET_CODE_PROMPT`) now names these
+  pitfalls: rows are arrays (use `indexOf`), x/y must be flat (`null` between segments), subplot axes need an
+  anchor, and about 150 lines at most. Unit test `test_prompt_names_the_pitfalls_seen_in_the_live_adar2_widget`.
+  **Live run 2/3: passed in 55.6 s** (agentic: 4 `query_data`, then `create_widget`; coder wrote the code). The new
+  widget `editing-sites-gene` renders correctly for Gla: Δ per site along the genomic position (loss in red, gain in
+  blue, size by coverage), with WT and ADAR levels on a second track below. The real-data e2e passes, and I checked
+  the screenshot. Small flaws: there are no axis titles, and the plot title says "sites in exon 7". The quality of
+  the live code still varies between runs. For a safe demo, consider loading the saved widget as a saved view (T51)
+  instead of generating it live. Q12: coder with about 55–85 s per turn works; the time limits stay as they are.
+  docs/api.md T42 note updated. Checks: `make test` 458 pass, ruff/typecheck/lint clean; non-live acceptance for
+  phases 1–4: 66/66 pass; `make e2e` 22/22 pass; real-data widget e2e 1/1 pass. No new dependencies.
 - 2026-11-22 · T42 · **live widget works; still `[~]` only for the visual check** · Found the cause of the
   time-outs: it was not a slow service. Both `coder` and `agentic` are reasoning models. On the widget prompt they
   streamed >30 000 reasoning chars (3 400 chunks in 150 s) and **0 answer chars**. A non-streamed call hits the read

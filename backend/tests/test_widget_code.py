@@ -93,6 +93,13 @@ def test_build_messages_has_contract_columns_previous_code_and_errors(bundle):
     assert "data.inputs.<name>" in WIDGET_CODE_PROMPT and "export default function Widget" in WIDGET_CODE_PROMPT
 
 
+def test_prompt_names_the_pitfalls_seen_in_the_live_adar2_widget():
+    # T42: the live code read a one-row input as an object and passed arrays of arrays as trace x/y
+    assert "never `row.gene_name`" in WIDGET_CODE_PROMPT
+    assert "never arrays of arrays" in WIDGET_CODE_PROMPT and "null between segments" in WIDGET_CODE_PROMPT
+    assert 'anchor: "x"' in WIDGET_CODE_PROMPT
+
+
 def test_build_messages_contains_no_rows(bundle):
     user = build_messages(bundle, DESC, [{"name": "all", "sql": "SELECT * FROM editing"}], None, None)[1]["content"]
     rows = bundle.cursor().execute("SELECT site_id FROM editing LIMIT 5").fetchall()

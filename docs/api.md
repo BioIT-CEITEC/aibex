@@ -98,7 +98,11 @@ class LLMProvider(Protocol):
   `"code_by": "chat model (the code model failed)"`. Only when both fail (time-out/network) is the `create_widget`
   rejected, and then the chat loop stops at once with an `error` event ("The widget could not be written: …"; nothing
   changed) instead of letting the chat model retry, which would double the wait. A code answer without a component
-  (no `export default`) is an ordinary failed attempt.
+  (no `export default`) is an ordinary failed attempt. The widget-code prompt also names the mistakes the live model
+  made on ADAR2: rows (even of a one-row input) are arrays, so read them via `columns.indexOf`; trace x/y are flat
+  arrays (`null` between line segments); subplot axes need `domain` + `anchor`; about 150 lines at most. Visual check
+  without an LLM call: the live test saves the widget to `logs/widgets/live-widget-editing-adar2.json`, and
+  `make e2e E2E_REAL_DATA=<data dir> ARGS=e2e/real-adar2-widget.spec.ts` renders it on ADAR2 with a gene selected.
 - Implementation (T22a, `aibex/llm/tools.py`): `TOOL_SCHEMAS` (OpenAI function definitions), plain functions `describe_bundle(bundle)`, `query_data(bundle, sql)`,
   `update_view(session, patch, summary)`, `undo_view(session, steps)` and the dispatcher
   `run_tool(session, name, arguments) -> ToolOutcome(name, result, changed, failed_change, summary)`; `content()` is
