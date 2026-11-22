@@ -240,6 +240,16 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
 - React and Plotly (decided, Q8; use a minified dist such as `plotly.js-basic-dist-min`) are inlined into the srcdoc
   (no CDN – the CSP forbids it); the widget gets them as `React` and `Plotly`. The parent compiles TSX (sucrase) and sends
   code + data via `postMessage`; the widget calls `onSelect(keys)` which is posted back to the parent.
+- Implementation (T41a): `frontend/src/widget-runtime/` – `runtime.tsx` (bundled with React into one IIFE string by
+  `frontend/widget-runtime-plugin.ts`, a nested Vite build exposed as `virtual:aibex-widget-runtime`), `srcdoc.ts`
+  (CSP meta + `plotly.js-basic-dist-min` + runtime, loaded lazily so the ~1.4 MB chunk is fetched only when a spec has
+  a widget), `protocol.ts`. Messages carry `aibex: 1`; both sides check the *source* window (the frame's origin is
+  opaque, so the parent posts with `'*'`). Parent → frame `{type: "render", code, data, selection}` (`data` = the
+  widget's `panel-data` response `{inputs: {...}}`, `selection` = linked selection keys). Frame → parent `ready`,
+  `rendered`, `select {keys}` (→ store selection, view state, no version), `error {phase: load|render, message}`
+  (shown in the panel as `widget-error-<id>` and inside the frame). The runtime evaluates CommonJS-style JS
+  (`exports.default = Widget`; `require` only for react/react-dom/plotly) through an inline `<script>` element – the
+  CSP has no `'unsafe-eval'`. Widgets whose input SQL uses `$selected` refetch `panel-data` with the selection.
 - `create_widget` defaults `language` to `tsx`; a new panel is appended to the layout at the bottom (`w: 6, h: 8`).
   Same id as an existing widget replaces that widget (new version); same id as a non-widget panel is an error.
 

@@ -56,7 +56,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 ## Phase 4 – Level 2 widgets
 - [x] T40a Widget validation (code size/blocklist, input SQL read-only) + `panel-data` input resolution with `$selected` as a bound parameter [A4.2, A4.3] (after: T13b, T15b)
 - [x] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
-- [ ] T41a Iframe runtime: srcdoc with CSP + inlined React and Plotly (minified dist), postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
+- [x] T41a Iframe runtime: srcdoc with CSP + inlined React and Plotly (minified dist), postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
 - [ ] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
 - [ ] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
 
@@ -71,6 +71,24 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T41a · done · Widget panels now render in `<iframe sandbox="allow-scripts">` (`widget-frame-<id>`)
+  whose srcdoc starts with the `default-src 'none'` CSP and inlines Plotly basic + a React runtime (no CDN). React 19
+  has no UMD build, so `frontend/widget-runtime-plugin.ts` bundles `src/widget-runtime/runtime.tsx` + React with a
+  nested Vite build into a string module (`virtual:aibex-widget-runtime`; no JSX in the runtime because the nested build
+  would pick the dev JSX runtime under the dev server). The srcdoc chunk (~1.4 MB, 478 kB gzip) is a lazy import, main
+  bundle unchanged. postMessage bridge: render {code, data, selection} → frame; ready/rendered/select/error ← frame
+  (source-window checks); `onSelect` sets the linked selection; widgets whose SQL uses `$selected` refetch panel-data
+  with the selection (`usePanelData` got an optional selection arg). Code is evaluated via an inline script element
+  (CSP has no unsafe-eval) as CommonJS (`exports.default`); load/render errors show inside the panel
+  (`widget-error-<id>`). TSX is **not** compiled yet (T41b, sucrase) – code is sent as-is, so the FakeProvider "add
+  widget" (TSX) shows a syntax error in the panel and E4.1 still fails at its last step (iframe/sandbox/CSP checks of
+  E4.1 now pass). docs/api.md: implementation note under "Level 2 widget runtime". New e2e
+  `e2e/widget-runtime.spec.ts` (2 tests: data + selection both ways + CSP blocks an image load + Plotly global;
+  broken code stays inside its panel), screenshot `logs/screens/T41a-widget-runtime.png` (checked). Checks:
+  `make test` 429 pass + ruff/typecheck/lint clean; acceptance (all non-live, phases 1–4) 66/66 pass; `make e2e` 18
+  pass, only E4.1 fails (T41b); `npm run build` ok. New dependency: `plotly.js-basic-dist-min` (Q8 decision, 1.2 MB
+  basic dist for the iframe – the full 4.6 MB dist stays for the dashboard). `make accept-phase` again run as the
+  direct pytest command. Next: T41b.
 - 2026-11-22 · T40b · done · `create_widget` in `aibex/llm/tools.py` (OpenAI schema + function, dispatched by
   `run_tool`): builds a `widget` panel and applies it as one JSON Patch through the normal session validation (so the
   T40a code/SQL checks apply; rejected → `failed_change`, spec unchanged). New id → panel appended + layout item at

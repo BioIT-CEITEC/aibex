@@ -18,23 +18,35 @@ interface Result {
   error: string | null;
 }
 
-export function usePanelData(sessionId: string | null, panel: Panel, filters: Filter[] | undefined): PanelDataState {
+export function usePanelData(
+  sessionId: string | null,
+  panel: Panel,
+  filters: Filter[] | undefined,
+  /** Sent with the request (and part of the refetch key) only when given – widgets whose SQL uses `$selected`. */
+  selection?: string[] | null,
+): PanelDataState {
   const [attempt, setAttempt] = useState(0);
-  const key = sessionId ? `${sessionId}|${attempt}|${JSON.stringify(panel)}|${JSON.stringify(filters ?? [])}` : '';
+  const selectionPart = selection ? `|sel:${JSON.stringify(selection)}` : '';
+  const key = sessionId
+    ? `${sessionId}|${attempt}|${JSON.stringify(panel)}|${JSON.stringify(filters ?? [])}${selectionPart}`
+    : '';
   const [result, setResult] = useState<Result>({ key: '', data: null, error: null });
   const panelId = panel.id;
+  // a string, so a new array with the same keys does not refetch
+  const selectionJson = selection ? JSON.stringify(selection) : '';
 
   useEffect(() => {
     if (!sessionId || !key) return;
     let cancelled = false;
-    api.panelData(sessionId, panelId).then(
+    const sel = selectionJson ? (JSON.parse(selectionJson) as string[]) : undefined;
+    api.panelData(sessionId, panelId, sel).then(
       (data) => !cancelled && setResult({ key, data, error: null }),
       (e: unknown) => !cancelled && setResult({ key, data: null, error: errorMessage(e) }),
     );
     return () => {
       cancelled = true;
     };
-  }, [sessionId, panelId, key]);
+  }, [sessionId, panelId, key, selectionJson]);
 
   const fresh = result.key === key;
   return {

@@ -3,10 +3,17 @@ import { usePanelData } from '@/lib/usePanelData';
 import type { Filter, Panel } from '@/lib/types';
 import { PlotPanel } from './PlotPanel';
 import { TablePanel } from './TablePanel';
+import { WidgetPanel } from './WidgetPanel';
+import { useAppStore } from '@/store';
 
-/** Panels whose data come from `panel-data` (text needs none; widgets get theirs in T40a/T41a). */
+/** Panels whose data come from `panel-data` (text needs none). */
 function needsData(panel: Panel): boolean {
-  return panel.type === 'plot' || panel.type === 'table';
+  return panel.type === 'plot' || panel.type === 'table' || panel.type === 'widget';
+}
+
+/** Widgets whose input SQL uses `$selected` refetch when the selection changes; nothing else sends the selection. */
+function usesSelected(panel: Panel): boolean {
+  return panel.type === 'widget' && (panel.inputs ?? []).some((i) => /\$selected\b/.test(i.sql));
 }
 
 /**
@@ -26,7 +33,13 @@ export function PanelFrame({
   /** `spec.selection.key` when linked selection is on, else null. */
   selectionKey: string | null;
 }) {
-  const state = usePanelData(needsData(panel) ? sessionId : null, panel, filters);
+  const selection = useAppStore((s) => s.selection);
+  const state = usePanelData(
+    needsData(panel) ? sessionId : null,
+    panel,
+    filters,
+    usesSelected(panel) ? selection : null,
+  );
   const kind = panel.type === 'plot' ? panel.kind : panel.type;
 
   return (
@@ -75,6 +88,6 @@ function PanelBody({
     case 'plot':
       return <PlotPanel panel={panel} state={state} selectionKey={selectionKey} />;
     case 'widget':
-      return <p className="text-xs text-muted-foreground">Custom widget – the sandboxed runtime is not built yet.</p>;
+      return <WidgetPanel panel={panel} state={state} />;
   }
 }
