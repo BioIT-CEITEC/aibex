@@ -1,5 +1,7 @@
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { usePanelData } from '@/lib/usePanelData';
+import { cn } from '@/lib/utils';
 import type { Filter, Panel } from '@/lib/types';
 import { PlotPanel } from './PlotPanel';
 import { TablePanel } from './TablePanel';
@@ -41,10 +43,14 @@ export function PanelFrame({
     usesSelected(panel) ? selection : null,
   );
   const kind = panel.type === 'plot' ? panel.kind : panel.type;
+  // first load: nothing to show yet → placeholder; refetch: keep the old data, dimmed, with a spinner in the title bar
+  const firstLoad = state.loading && !state.data;
 
   return (
     <div
       data-testid={`panel-${panel.id}`}
+      data-loading={state.loading ? 'true' : undefined}
+      aria-busy={state.loading || undefined}
       className="flex h-full flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-xs"
     >
       <div
@@ -53,18 +59,36 @@ export function PanelFrame({
       >
         <h2 className="truncate text-sm font-medium">{panel.title || panel.id}</h2>
         <span className="text-xs text-muted-foreground">{kind}</span>
-        {state.loading && <span className="ml-auto text-xs text-muted-foreground">loading…</span>}
+        {state.loading && !firstLoad && (
+          <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+            <Spinner className="size-3" /> updating…
+          </span>
+        )}
       </div>
       <div className="relative min-h-0 flex-1 p-2">
         {state.error ? (
-          <div role="alert" className="flex flex-col items-start gap-2 text-xs text-destructive">
+          <div
+            role="alert"
+            data-testid={`error-panel-${panel.id}`}
+            className="flex flex-col items-start gap-2 text-xs text-destructive"
+          >
             <span className="break-words">Could not load this panel: {state.error}</span>
-            <Button variant="outline" size="sm" onClick={state.reload}>
+            <Button variant="outline" size="sm" data-testid={`retry-panel-${panel.id}`} onClick={state.reload}>
               Retry
             </Button>
           </div>
+        ) : firstLoad ? (
+          <div
+            data-testid={`loading-panel-${panel.id}`}
+            className="flex h-full animate-pulse flex-col items-center justify-center gap-2 rounded-md bg-muted/40 text-xs text-muted-foreground"
+          >
+            <Spinner />
+            Loading data…
+          </div>
         ) : (
-          <PanelBody panel={panel} state={state} selectionKey={selectionKey} />
+          <div className={cn('h-full transition-opacity', state.loading && 'opacity-60')}>
+            <PanelBody panel={panel} state={state} selectionKey={selectionKey} />
+          </div>
         )}
       </div>
     </div>

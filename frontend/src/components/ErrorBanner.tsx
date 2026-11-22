@@ -17,6 +17,7 @@ export function ErrorBanner() {
         <Button
           variant="outline"
           size="sm"
+          data-testid="error-retry"
           onClick={() => {
             const retry = error.retry;
             setError(null);

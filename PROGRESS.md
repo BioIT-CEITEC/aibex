@@ -61,7 +61,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
 
 ## Phase 5 – polish
-- [ ] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
+- [x] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
 - [ ] T51 Saved views per bundle: `/bundles/{id}/views`, `/sessions/{sid}/load-view`, UI save/load; unit tests [P5.2] (after: T15, T24b)
 - [ ] T52 Demo-script panel with the 6 demo prompts, click to send [P5.3] (after: T24a)
 - [ ] T53 Theme + palette pass (light/dark) [P5.4]; final screenshots of every demo prompt into `logs/screens/` (after: T50, T52)
@@ -71,6 +71,19 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T50 · **done (P5.1)** · Panels: the first load shows a placeholder with a spinner
+  (`loading-panel-<id>`). A refetch keeps the old data, dimmed, with "updating…" in the title bar. The frame has
+  `data-loading`/`aria-busy`. A failed panel has `error-panel-<id>` and `retry-panel-<id>`. These test ids avoid the
+  `panel-` prefix that other specs use to count frames. Chat: the pending bubble shows the running step
+  ("querying the data…") and the elapsed seconds (`chat-pending`, `chat-elapsed`), because live widget turns take
+  about 60 s. When the request itself fails with 0/5xx, the bubble gets a Retry button (`chat-retry`) that sends the
+  same prompt again. A 4xx still gives the text back to the input. Error banner: patch/undo/redo failures with 0/5xx
+  now offer Retry (`error-retry`), and 4xx rejections do not. Also fixed: `busy` could stay true when the session
+  changed while a change was in flight. New `e2e/loading.spec.ts` (6 tests, slow or failing calls simulated with
+  `page.route`). Screenshots: `logs/screens/P5.1-{panels-loading,chat-pending,error-banner}.png`, all checked. Note:
+  in the early full-page loading screenshot the grid runs under the chat column for a moment; this was not seen
+  after the grid had measured its width. Checks: `make test` 458 pass + ruff/typecheck/lint clean; `make accept`
+  (phases 1–4) 66/66 pass; `make e2e` 28/28 pass. No new dependencies.
 - 2026-11-22 · T42 · **done (M4 visual check)** · Live run 1/3 (`-k widget_editing`): passed in 84 s and saved
   the widget. New opt-in real-data e2e `e2e/real-adar2-widget.spec.ts`: adds the saved widget to an ADAR2 session via
   `/patch`, clicks the top edited gene (Gla, 44 sites), and checks the sandbox, that Plotly drew points, and that there

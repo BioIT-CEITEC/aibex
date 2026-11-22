@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { HistoryList } from '@/components/History';
 import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 import { useAppStore, type ChatMessage } from '@/store';
 
@@ -22,8 +23,34 @@ function ToolLine({ name, status }: { name: string; status: string }) {
   );
 }
 
+/** Seconds since `startedAt`, ticking once a second while `active` (live LLM turns can take a minute). */
+function useElapsed(startedAt: number | undefined, active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [active]);
+  return startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0;
+}
+
+function PendingLine({ m }: { m: ChatMessage }) {
+  const seconds = useElapsed(m.startedAt, !!m.pending);
+  const running = [...m.tools].reverse().find((t) => t.status === 'running');
+  const label = running ? (TOOL_LABELS[running.name] ?? running.name) : m.text ? 'writing' : 'thinking';
+  return (
+    <p data-testid="chat-pending" className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Spinner className="size-3" />
+      <span>
+        {label}… {seconds >= 1 && <span data-testid="chat-elapsed">{seconds} s</span>}
+      </span>
+    </p>
+  );
+}
+
 function AssistantMessage({ m }: { m: ChatMessage }) {
-  const empty = !m.text && !m.error && m.changes.length === 0;
+  const retryChat = useAppStore((s) => s.retryChat);
+  const chatBusy = useAppStore((s) => s.chatBusy);
   return (
     <div data-testid="chat-message" data-pending={m.pending ? 'true' : undefined} className="max-w-[95%] self-start">
       <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
@@ -42,7 +69,19 @@ function AssistantMessage({ m }: { m: ChatMessage }) {
         ))}
         {m.text && <p className="whitespace-pre-wrap break-words">{m.text}</p>}
         {m.error && <p className="whitespace-pre-wrap break-words text-destructive">⚠ {m.error}</p>}
-        {empty && m.pending && <p className="animate-pulse text-muted-foreground">Thinking…</p>}
+        {m.retryText && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-1"
+            data-testid="chat-retry"
+            disabled={chatBusy}
+            onClick={() => void retryChat(m.id)}
+          >
+            Retry
+          </Button>
+        )}
+        {m.pending && <PendingLine m={m} />}
       </div>
     </div>
   );
@@ -72,8 +111,11 @@ export function ChatPanel() {
     if (!text || busy || !sessionId) return;
     setDraft('');
     const ok = await sendChat(text);
-    // the request itself failed (backend unreachable, 422): give the text back for a retry
-    if (!ok) setDraft((d) => d || text);
+    // the request itself was rejected (e.g. 422): give the text back to edit; failures that can pass on a second try
+    // get a Retry button in the reply bubble instead
+    const after = useAppStore.getState().chat;
+    const last = after[after.length - 1];
+    if (!ok && !last?.retryText) setDraft((d) => d || text);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

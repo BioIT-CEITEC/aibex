@@ -6,6 +6,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { FiltersBar } from '@/components/FiltersBar';
 import { UndoRedoButtons } from '@/components/History';
 import { SelectionBar } from '@/components/SelectionBar';
+import { Spinner } from '@/components/ui/spinner';
 import { useAppStore } from '@/store';
 
 // App shell (T16c): header with bundle selector and spec version, error banner, session bootstrap from `?bundle=`.
@@ -39,7 +40,9 @@ export default function App() {
       <div className="flex flex-1 items-start">
         <main className="min-w-0 flex-1 p-4">
           {loading && !spec ? (
-            <p className="text-sm text-muted-foreground">Opening bundle…</p>
+            <p data-testid="app-loading" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner /> Opening bundle…
+            </p>
           ) : spec ? (
             <>
               <FiltersBar filters={spec.filters ?? []} />

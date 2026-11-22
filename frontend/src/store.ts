@@ -2,7 +2,7 @@
 // The spec is the single source of truth for what the dashboard shows (CLAUDE.md, contract 1); every change goes
 // through the backend (patch/undo/redo) and the store takes the returned spec – it never edits the spec locally.
 import { create } from 'zustand';
-import { api, chatStream, errorMessage } from '@/lib/api';
+import { api, ApiError, chatStream, errorMessage } from '@/lib/api';
 import type { BundleInfo, ChatEvent, HistoryEntry, PatchOp, Spec, SpecVersion } from '@/lib/types';
 
 export interface AppError {
@@ -24,6 +24,10 @@ export interface ChatMessage {
   error?: string;
   /** True while the turn is still streaming. */
   pending?: boolean;
+  /** When the turn started (ms since epoch); the pending bubble shows the elapsed time (T50). */
+  startedAt?: number;
+  /** Set when the request itself failed (no reply at all): the prompt to send again with "Retry" (T50). */
+  retryText?: string;
 }
 
 interface AppState {
@@ -56,6 +60,8 @@ interface AppState {
    * itself failed (the caller may keep the text for a retry); LLM-side errors still count as sent.
    */
   sendChat: (message: string) => Promise<boolean>;
+  /** Send the prompt of a failed turn (`retryText`) again; the failed bubble loses its Retry button. */
+  retryChat: (messageId: number) => Promise<boolean>;
   /** Replace the selection, or toggle `keys` in/out of it (shift/ctrl/cmd-click). */
   select: (keys: string[], mode?: 'replace' | 'toggle') => void;
   /** Load the bundle list and start a session for `requested` (or the first bundle). */
@@ -143,7 +149,10 @@ export const useAppStore = create<AppState>()((set, get) => {
     set({ busy: true });
     try {
       const res = await run(sid);
-      if (get().sessionId !== sid) return false;
+      if (get().sessionId !== sid) {
+        set({ busy: false });
+        return false;
+      }
       const { canUndo, canRedo } = get();
       const counts =
         kind === 'patch'
@@ -155,7 +164,15 @@ export const useAppStore = create<AppState>()((set, get) => {
       void refreshHistory(sid);
       return true;
     } catch (e) {
-      set({ busy: false, error: { message: `${label} failed: ${errorMessage(e)}` } });
+      if (get().sessionId !== sid) {
+        set({ busy: false });
+        return false;
+      }
+      // network/server trouble (status 0 or 5xx) may pass on a second try; a 4xx is a real rejection (invalid
+      // patch 422, nothing to undo 409) and retrying would only repeat it
+      const status = e instanceof ApiError ? e.status : 0;
+      const retry = status === 0 || status >= 500 ? () => void change(label, kind, run) : undefined;
+      set({ busy: false, error: { message: `${label} failed: ${errorMessage(e)}`, retry } });
       return false;
     }
   };
@@ -182,7 +199,15 @@ export const useAppStore = create<AppState>()((set, get) => {
       if (!sid || !text || get().chatBusy) return false;
       const userMsg: ChatMessage = { id: ++chatSeq, role: 'user', text, tools: [], changes: [] };
       const replyId = ++chatSeq;
-      const reply: ChatMessage = { id: replyId, role: 'assistant', text: '', tools: [], changes: [], pending: true };
+      const reply: ChatMessage = {
+        id: replyId,
+        role: 'assistant',
+        text: '',
+        tools: [],
+        changes: [],
+        pending: true,
+        startedAt: Date.now(),
+      };
       const abort = new AbortController();
       chatAbort = abort;
       set({ chat: [...get().chat, userMsg, reply], chatBusy: true });
@@ -227,7 +252,14 @@ export const useAppStore = create<AppState>()((set, get) => {
       } catch (e) {
         if (abort.signal.aborted) return false;
         ok = false;
-        update((m) => ({ ...m, error: `Chat request failed: ${errorMessage(e)}` }));
+        // a 4xx (empty/too long message) would fail again unchanged; anything else may pass on a retry
+        const status = e instanceof ApiError ? e.status : 0;
+        const retryable = status === 0 || status >= 500;
+        update((m) => ({
+          ...m,
+          error: `Chat request failed: ${errorMessage(e)}`,
+          retryText: retryable && !m.text && m.changes.length === 0 ? text : undefined,
+        }));
       }
       if (chatAbort === abort) chatAbort = null;
       update((m) => ({
@@ -238,6 +270,14 @@ export const useAppStore = create<AppState>()((set, get) => {
       }));
       if (get().sessionId === sid) set({ chatBusy: false });
       return ok;
+    },
+
+    retryChat: async (messageId) => {
+      const failed = get().chat.find((m) => m.id === messageId);
+      if (!failed?.retryText || get().chatBusy) return false;
+      const text = failed.retryText;
+      set({ chat: get().chat.map((m) => (m.id === messageId ? { ...m, retryText: undefined } : m)) });
+      return get().sendChat(text);
     },
 
     select: (keys, mode = 'replace') => {
