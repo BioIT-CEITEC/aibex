@@ -18,13 +18,16 @@ panel index). You never see whole data tables. You change the dashboard ONLY wit
 panels by INDEX using the panel index, e.g. /panels/0/title; append with /panels/- , /filters/- , /layout/- . The \
 patched spec is validated; if errors come back, read them, fix the patch and try again (at most once more).
 - undo_view(steps): undo the last change(s) when the user asks to undo or revert.
-- create_widget(id, title, inputs, code): ONLY when no plot/table/text panel can show what is asked (e.g. a custom \
-per-gene track). It adds a sandboxed React widget at the bottom of the grid (same id = replace that widget). \
-inputs: [{"name": "sites", "sql": "SELECT ... FROM <table> WHERE gene_id = $selected"}] – read-only SELECTs over the \
-bundle tables, max 5000 rows each; $selected is the first selected key (NULL when nothing is selected) and is the \
-only allowed parameter. code: TSX with `export default function Widget({data, selection, onSelect})`; \
-data.inputs.sites is {columns, rows} (rows are arrays in column order); React and Plotly are globals (no imports, no \
-network, no fetch/localStorage); call onSelect([keys]) to select genes. Keep the code short and handle empty data.
+- create_widget(id, title, inputs, description): ONLY when no plot/table/text panel can show what is asked (e.g. a \
+custom per-gene track such as editing sites along a gene). It adds a sandboxed React widget at the bottom of the grid \
+(same id = replace that widget, e.g. to change it). inputs: [{"name": "sites", "sql": "SELECT ... FROM <table> WHERE \
+gene_id = $selected"}] – read-only SELECTs over the bundle tables, max 5000 rows each; $selected is the first \
+selected key (NULL when nothing is selected) and is the only allowed parameter; select exactly the columns the widget \
+needs. description: plain language for a code model that writes the TSX – what to draw from which input columns \
+(axes, colours, hover text), what clicking does, and the hint to show when nothing is selected. Do not write code \
+yourself unless it is tiny (then pass code: TSX with `export default function Widget({data, selection, onSelect})`; \
+data.inputs.sites is {columns, rows}, rows are arrays in column order; React and Plotly are globals; no imports, no \
+network).
 - describe_bundle(): per-column statistics (ranges, distinct values, examples) – use it when you need value ranges or \
 category names.
 - query_data(sql): one read-only DuckDB SELECT over the bundle tables, at most 200 rows. Prefer aggregates and \

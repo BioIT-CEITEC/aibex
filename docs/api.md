@@ -58,7 +58,7 @@ class LLMProvider(Protocol):
 
 ## Chat loop (`aibex/llm/chat.py`)
 - Tools exposed to the LLM: `describe_bundle()`, `query_data(sql)`, `update_view(patch, summary)`, `undo_view(steps)`,
-  `create_widget(id, title, inputs, code)`.
+  `create_widget(id, title, inputs, description | code)`.
 - Tool results (JSON strings):
   - `describe_bundle` → schema (as `GET /bundles/{id}/schema`) plus per-column summary stats: `n_null`; numeric
     `min`, `max`, `mean`; string `n_distinct` and at most 10 example values. Never rows.
@@ -80,6 +80,19 @@ class LLMProvider(Protocol):
   kept, an empty title keeps the old title), summary `replace widget <id>`; id of a non-widget panel → error. Result
   `{"ok": true, "version": n, "panel_id": id}`. `inputs` may be omitted (= `[]`) or double-encoded as a JSON string.
   Undo is the normal session undo.
+- Implementation (T42, `aibex/llm/widget_code.py`): `create_widget(id, title, inputs, description?, code?[,
+  language])` – `code` is optional now. Without `code` but with `description`, the **code model** (`llm_model_code`)
+  writes the TSX: the inputs are checked first (guard + dry run; errors go back to the chat model without calling the
+  code model), then one `provider.chat(messages, tools=[], model=llm_model_code)` with a widget-code system prompt
+  (runtime contract) and a user message with the description, each input's name, SQL and result columns/types (from
+  `LIMIT 0` – no rows) and, when a widget is replaced, its current code. The code is taken from the fenced block with
+  `export default` (else the text). Code rejected by the validation (only `.code` errors) is sent back to the code
+  model once with the errors. Result adds `"code_by": "code model"`. The description is not stored in the spec. An
+  explicit `code` wins (FakeProvider still passes code). `chat_events`/`run_chat` take `code_model`; `/chat` passes
+  `settings.llm_model_code`. The code-model call is bounded: 90 s, no retry (`OpenAICompatibleProvider.with_timeout`);
+  when it fails or times out, the chat model writes the code from the same messages and the result says
+  `"code_by": "chat model (the code model failed)"`. Only when both fail is the `create_widget` rejected (counts as a
+  failed attempt).
 - Implementation (T22a, `aibex/llm/tools.py`): `TOOL_SCHEMAS` (OpenAI function definitions), plain functions `describe_bundle(bundle)`, `query_data(bundle, sql)`,
   `update_view(session, patch, summary)`, `undo_view(session, steps)` and the dispatcher
   `run_tool(session, name, arguments) -> ToolOutcome(name, result, changed, failed_change, summary)`; `content()` is

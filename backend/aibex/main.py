@@ -145,12 +145,13 @@ def _api_router() -> APIRouter:
         """Chat loop (docs/api.md): SSE stream by default; `?stream=false` → `{reply, spec, version, events}`."""
         s = get_session(request, sid)
         provider = request.app.state.llm_provider
+        code_model = get_settings(request).llm_model_code  # writes widget code (create_widget with description)
         if stream:
-            frames = (sse_frame(e) for e in chat_events(s, provider, body.message))
+            frames = (sse_frame(e) for e in chat_events(s, provider, body.message, code_model=code_model))
             return StreamingResponse(
                 frames, media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
             )
-        result = run_chat(s, provider, body.message)
+        result = run_chat(s, provider, body.message, code_model=code_model)
         with s.lock:
             return {"reply": result.reply, "spec": s.spec, "version": s.version, "events": result.events}
 

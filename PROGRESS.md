@@ -58,7 +58,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
 - [x] T41a Iframe runtime: srcdoc with CSP + inlined React and Plotly (minified dist), postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
 - [x] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
-- [ ] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
+- [~] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
 
 ## Phase 5 – polish
 - [ ] T50 Loading states for panels and chat, error banner with retry [P5.1] (after: T24b)
@@ -71,6 +71,30 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T42 · **partial `[~]`** · Built the code-model path: `create_widget` now takes a plain-language
+  `description` (with `code` optional). The chat model (`LLM_MODEL_FAST`) plans the id, title and SQL inputs, and the
+  **code model** (`LLM_MODEL_CODE`) writes the TSX (`aibex/llm/widget_code.py`). The code model gets no tools. It sees
+  the runtime contract, the description, each input's SQL and result columns/types (from a `LIMIT 0` query, so no
+  rows), and the previous code when a widget is replaced. Input SQL is checked before the code model is called. Code
+  rejected by validation is sent back to the code model once. The code-model call is limited to 90 s with no retry
+  (`OpenAICompatibleProvider.with_timeout`), then the chat model writes the code instead (`code_by` in the tool
+  result). System prompt and tool schema now point to `description`; docs/api.md has a T42 note. Explicit `code`
+  still works, so the FakeProvider/e2e path is unchanged. New tests: `tests/test_widget_code.py` (22 tests). New live
+  test: `test_live_widget_editing_sites_adar2` (opt-in, `-m live`): demo prompt 5 on ADAR2, checks one widget is
+  added, its input uses `$selected`, and panel-data has sites for the gene with the most sites. **Live result: 2
+  runs, 0/2 pass, both times because the service timed out.** In both runs the chat model (agentic) planned well:
+  2–3 `query_data` calls, then `create_widget` with a description. Run 1 (no fallback yet): `coder` timed out (120 s
+  ×2 retries) twice, 517 s in total. Run 2 (with fallback): `coder` timed out at 90 s, and then `agentic` *also*
+  timed out writing the code with no tools (120 s ×2), twice, 691 s in total. So tonight the e-INFRA service did not
+  finish a long code answer within 120 s from either model, while short tool-call turns worked. I kept the third
+  allowed live run. **Remaining:** re-run `make accept-live ARGS="-k widget_editing -s"` when the service is
+  responsive, then check that the printed widget code renders on the ADAR2 page (visual M4 check). If `coder` stays
+  slow, try another code model alias, or raise the 120 s provider timeout. Question for Vojta (Q12): which code
+  model and what time limit do you accept for a live widget in the demo? Proposed: 90 s for the code model, then the
+  chat model. Smaller problem: a code-model timeout counts as a failed change, so the chat model retries
+  `create_widget` once, which doubles the wait. Possible fix: stop after the first time-out. Checks: `make test` 451
+  pass + ruff clean; non-live acceptance phases 1–4: 66/66 pass. No frontend change, so no e2e run. No new
+  dependencies.
 - 2026-11-22 · T41b · done · `WidgetPanel` compiles widget TSX/JSX in the browser with sucrase
   (`src/widget-runtime/compile.ts`: typescript (tsx only) + jsx classic + imports → CommonJS); the compiler is a lazy
   chunk (200 kB, 46 kB gzip) loaded with the srcdoc, main bundle unchanged. Compile errors (with line:col) are sent to

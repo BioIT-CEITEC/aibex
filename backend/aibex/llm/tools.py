@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from aibex.bundles import Bundle
+from aibex.llm.widget_code import CodeWriter, WidgetCodeError
 from aibex.query import QueryError, jsonable, run_query
 from aibex.sessions import NothingToUndo, PatchError, Session
+from aibex.widgets import check_input
 
 MAX_TOOL_ROWS = 200  # privacy rule: no tool result contains more rows than this
 N_EXAMPLES = 10  # example values per string column in describe_bundle
@@ -95,7 +97,9 @@ TOOL_SCHEMAS: list[dict] = [
                 "(max 5000 rows each; `$selected` = the first selected key, or NULL). The component is "
                 "`export default function Widget({data, selection, onSelect})`; `data.inputs.<name>` is "
                 "{columns, rows} with rows as arrays aligned with columns; `React` and `Plotly` are globals; "
-                "call onSelect([keys]) to select. The panel is placed at the bottom of the grid."
+                "call onSelect([keys]) to select. The panel is placed at the bottom of the grid. Preferably give "
+                "`description` (what to show, which input columns, interactions) and leave out `code`: a "
+                "specialised code model then writes the code. Give `code` only for tiny widgets."
             ),
             "parameters": {
                 "type": "object",
@@ -113,10 +117,19 @@ TOOL_SCHEMAS: list[dict] = [
                             "required": ["name", "sql"],
                         },
                     },
-                    "code": {"type": "string", "description": "TSX source with `export default function Widget`"},
+                    "description": {
+                        "type": "string",
+                        "description": "plain-language spec of the widget for the code model, e.g. 'scatter of "
+                        "the sites along the gene: x = position, y = delta, colour by significance; hint when "
+                        "nothing is selected'",
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "optional TSX source with `export default function Widget`",
+                    },
                     "language": {"type": "string", "enum": ["tsx", "jsx"], "default": "tsx"},
                 },
-                "required": ["id", "title", "inputs", "code"],
+                "required": ["id", "title", "inputs"],
                 "additionalProperties": False,
             },
         },
@@ -339,17 +352,26 @@ def create_widget(
     inputs: Any = None,
     code: Any = None,
     language: Any = None,
+    description: Any = None,
+    code_writer: CodeWriter | None = None,
 ) -> ToolOutcome:
     """Add a widget panel at the bottom of the grid, or replace the widget with the same id; one version (`llm`).
 
-    The panel is validated like any patch (code size/blocklist, read-only input SQL with only `$selected`, dry run);
-    on errors nothing changes and the errors go back to the model.
+    Without `code` but with a `description`, `code_writer` (the code model, T42) writes the code; code rejected by the
+    validation is sent back to it once with the errors. The panel is validated like any patch (code size/blocklist,
+    read-only input SQL with only `$selected`, dry run); on errors nothing changes and the errors go back to the model.
     """
+    has_code = isinstance(code, str) and bool(code.strip())
+    has_description = isinstance(description, str) and bool(description.strip())
     errors = []
     if not isinstance(id, str) or not id.strip():
         errors.append("create_widget needs 'id': a kebab-case panel id such as 'editing-sites'")
-    if not isinstance(code, str) or not code.strip():
-        errors.append("create_widget needs 'code': TSX source with `export default function Widget({data})`")
+    if not has_code and not has_description:
+        errors.append("create_widget needs 'description' (what the widget shows, for the code model) or 'code' "
+                      "(TSX source with `export default function Widget({data})`)")
+    elif not has_code and code_writer is None:
+        errors.append("no code model is available here; pass 'code' (TSX source with `export default function "
+                      "Widget({data})`)")
     inputs = _coerce_inputs(inputs)
     if not isinstance(inputs, list):
         errors.append("'inputs' must be a list of {name, sql} objects")
@@ -357,22 +379,53 @@ def create_widget(
         errors.append("'title' must be a string")
     if errors:
         return ToolOutcome("create_widget", _err(*errors), failed_change=True)
-    panel: dict[str, Any] = {"id": id.strip(), "type": "widget", "title": (title or "").strip(), "inputs": inputs,
-                             "code": code, "language": language or "tsx"}
-    planned = _widget_patch(session.spec, panel)
-    if isinstance(planned, str):
-        return ToolOutcome("create_widget", _err(planned), failed_change=True)
-    patch, summary = planned
-    try:
-        session.apply_patch(patch, summary, source="llm")
-    except PatchError as exc:
-        return ToolOutcome("create_widget", _err(*exc.errors), failed_change=True)
-    return ToolOutcome(
-        "create_widget",
-        {"ok": True, "version": session.version, "panel_id": panel["id"]},
-        changed=True,
-        summary=session.history[-1]["summary"],
-    )
+    pid = id.strip()
+    previous = next((p for p in session.spec.get("panels") or []
+                     if isinstance(p, dict) and p.get("id") == pid and p.get("type") == "widget"), None)
+    if not has_code:
+        # check the inputs first: the code model is slow and cannot fix SQL
+        bad = _input_errors(session, inputs)
+        if bad:
+            return ToolOutcome("create_widget", _err(*bad), failed_change=True)
+    rejected: list[str] | None = None
+    for attempt in range(1 if has_code else 2):
+        if not has_code:
+            try:
+                code = code_writer(description, inputs, previous.get("code") if previous else None, rejected)
+            except WidgetCodeError as exc:
+                return ToolOutcome("create_widget", _err(str(exc)), failed_change=True)
+        panel: dict[str, Any] = {"id": pid, "type": "widget", "title": (title or "").strip(), "inputs": inputs,
+                                 "code": code, "language": language or "tsx"}
+        planned = _widget_patch(session.spec, panel)
+        if isinstance(planned, str):
+            return ToolOutcome("create_widget", _err(planned), failed_change=True)
+        patch, summary = planned
+        try:
+            session.apply_patch(patch, summary, source="llm")
+            break
+        except PatchError as exc:
+            code_only = all(".code" in str(e) for e in exc.errors)
+            if has_code or attempt == 1 or not code_only:
+                return ToolOutcome("create_widget", _err(*exc.errors), failed_change=True)
+            rejected = [str(e) for e in exc.errors]
+    result: dict[str, Any] = {"ok": True, "version": session.version, "panel_id": pid}
+    if not has_code:
+        fallback = getattr(code_writer, "used_fallback", False)
+        result["code_by"] = "chat model (the code model failed)" if fallback else "code model"
+    return ToolOutcome("create_widget", result, changed=True, summary=session.history[-1]["summary"])
+
+
+def _input_errors(session: Session, inputs: list) -> list[str]:
+    errors = []
+    for i, inp in enumerate(inputs):
+        if not isinstance(inp, dict) or not isinstance(inp.get("name"), str) or not isinstance(inp.get("sql"), str):
+            errors.append(f"inputs[{i}] must be an object {{name, sql}}")
+            continue
+        try:
+            check_input(session.bundle, inp["sql"])
+        except QueryError as exc:
+            errors.append(f"inputs[{i}].sql ({inp['name']}): {exc}")
+    return errors
 
 
 def undo_view(session: Session, steps: Any = 1) -> ToolOutcome:
@@ -396,8 +449,11 @@ def undo_view(session: Session, steps: Any = 1) -> ToolOutcome:
 
 
 # --- dispatcher -----------------------------------------------------------------------------------------------------
-def run_tool(session: Session, name: str, arguments: Any) -> ToolOutcome:
-    """Run one tool call for the chat loop. Never raises; unknown tools and bad arguments become error results."""
+def run_tool(session: Session, name: str, arguments: Any, code_writer: CodeWriter | None = None) -> ToolOutcome:
+    """Run one tool call for the chat loop. Never raises; unknown tools and bad arguments become error results.
+
+    `code_writer` (the code model) writes widget code when `create_widget` gets a `description` but no `code`.
+    """
     failed = name in CHANGE_TOOLS
     if not isinstance(arguments, dict):
         arguments = {}
@@ -427,6 +483,8 @@ def run_tool(session: Session, name: str, arguments: Any) -> ToolOutcome:
                 arguments.get("inputs"),
                 arguments.get("code"),
                 arguments.get("language"),
+                arguments.get("description"),
+                code_writer,
             )
     except Exception as exc:  # noqa: BLE001 – a tool must never crash the chat loop
         return ToolOutcome(

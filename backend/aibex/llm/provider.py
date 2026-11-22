@@ -205,6 +205,12 @@ class OpenAICompatibleProvider:
     def from_settings(cls, settings: Settings, **kwargs: Any) -> OpenAICompatibleProvider:
         return cls(settings.llm_base_url, settings.llm_api_key, settings.llm_model_fast, **kwargs)
 
+    def with_timeout(self, timeout: float) -> OpenAICompatibleProvider:
+        """A copy with a shorter request timeout and no retry (used for the code model, T42)."""
+        client = self._client.with_options(timeout=timeout, max_retries=0)
+        return OpenAICompatibleProvider(self.base_url, "", self.model, client=client, timeout=timeout,
+                                        temperature=self.temperature)
+
     def chat(self, messages: list[dict], tools: list[dict], model: str | None = None) -> LLMResponse:
         kwargs: dict[str, Any] = {
             "model": model or self.model,

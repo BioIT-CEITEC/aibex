@@ -24,6 +24,7 @@ from typing import Any
 from aibex.llm.prompts import SYSTEM_PROMPT, panel_index_text
 from aibex.llm.provider import LLMProvider, LLMResponse, with_text_fallback
 from aibex.llm.tools import TOOL_SCHEMAS, run_tool
+from aibex.llm.widget_code import make_code_writer
 from aibex.sessions import Session
 
 MAX_PROVIDER_CALLS = 8
@@ -75,11 +76,16 @@ def _remember(session: Session, message: str, reply: str) -> None:
         del session.chat[:-MAX_TRANSCRIPT]
 
 
-def chat_events(session: Session, provider: LLMProvider, message: str, model: str | None = None) -> Iterator[dict]:
-    """Run the loop for one user message, yielding events; always ends with `done`. Never raises."""
+def chat_events(
+    session: Session, provider: LLMProvider, message: str, model: str | None = None, code_model: str | None = None
+) -> Iterator[dict]:
+    """Run the loop for one user message, yielding events; always ends with `done`. Never raises.
+
+    `code_model` is the model that writes widget code when `create_widget` gets a `description` (T42).
+    """
     state = {"reply": ""}
     try:
-        yield from _loop(session, provider, message, model, state)
+        yield from _loop(session, provider, message, model, code_model, state)
     except Exception as exc:  # noqa: BLE001 – the loop must never crash the request
         state["reply"] = f"Chat failed: {type(exc).__name__}: {str(exc)[:300]}"
         yield {"type": "error", "message": state["reply"]}
@@ -87,7 +93,10 @@ def chat_events(session: Session, provider: LLMProvider, message: str, model: st
     yield {"type": "done"}
 
 
-def _loop(session: Session, provider: LLMProvider, message: str, model: str | None, state: dict) -> Iterator[dict]:
+def _loop(
+    session: Session, provider: LLMProvider, message: str, model: str | None, code_model: str | None, state: dict
+) -> Iterator[dict]:
+    code_writer = make_code_writer(session.bundle, provider, code_model, fallback_model=model)
     with session.lock:
         earlier = [dict(m) for m in session.chat[-HISTORY_MESSAGES:]]
     turn: list[dict] = [{"role": "user", "content": message}]
@@ -107,7 +116,7 @@ def _loop(session: Session, provider: LLMProvider, message: str, model: str | No
         turn.append(_assistant_message(response))
         for call in response.tool_calls:
             yield {"type": "tool", "name": call.name, "status": "running"}
-            outcome = run_tool(session, call.name, call.arguments)
+            outcome = run_tool(session, call.name, call.arguments, code_writer)
             turn.append({"role": "tool", "tool_call_id": call.id, "content": outcome.content()})
             ok = outcome.result.get("ok", True) is not False
             yield {"type": "tool", "name": call.name, "status": "ok" if ok else "error"}
@@ -133,9 +142,11 @@ def _loop(session: Session, provider: LLMProvider, message: str, model: str | No
             return
 
 
-def run_chat(session: Session, provider: LLMProvider, message: str, model: str | None = None) -> ChatResult:
+def run_chat(
+    session: Session, provider: LLMProvider, message: str, model: str | None = None, code_model: str | None = None
+) -> ChatResult:
     """Collect the events of one chat turn; `reply` = final text or the error message."""
-    events = list(chat_events(session, provider, message, model))
+    events = list(chat_events(session, provider, message, model, code_model))
     reply = ""
     for e in events:
         if e["type"] == "token":
