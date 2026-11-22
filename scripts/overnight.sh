@@ -77,6 +77,24 @@ past_deadline() {  # true between DEADLINE and noon
   [[ "$now" > "$DEADLINE" && "$now" < "12:00" ]]
 }
 
+# text of the last {"type":"result"} event in a stream-json log (empty if none)
+final_result() {
+  python3 -c '
+import json, sys
+res = ""
+for line in open(sys.argv[1], errors="replace"):
+    if "\"type\":\"result\"" not in line:
+        continue
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        continue
+    if ev.get("type") == "result":
+        res = ev.get("result") or ""
+print(res)
+' "$1" 2>/dev/null
+}
+
 stalls=0
 for ((i = 1; i <= MAX_ITER; i++)); do
   if past_deadline; then say "deadline reached"; break; fi
@@ -98,10 +116,12 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   # clean up stray dev servers
   pkill -f "uvicorn aibex.main" 2>/dev/null; pkill -f "$REPO/frontend/node_modules" 2>/dev/null
 
-  summary="$(tail -c 2000 "$ilog" | tr '\n' ' ' | grep -oE '"result":"[^"]{0,400}' | tail -1 | cut -c11-)"
+  # only the agent's final reply counts – tool output (e.g. reading this script) can contain the stop word
+  result="$(final_result "$ilog")"
+  summary="$(printf '%s' "$result" | tr '\n' ' ' | cut -c1-400)"
   say "iteration $i end rc=$rc HEAD ${after:0:7} :: ${summary:-<no summary>}"
 
-  if grep -q "ALL_TASKS_DONE_OR_BLOCKED" "$ilog"; then say "agent reports all tasks done or blocked"; break; fi
+  if [[ "$result" == *ALL_TASKS_DONE_OR_BLOCKED* ]]; then say "agent reports all tasks done or blocked"; break; fi
 
   # look only at the final result/error lines – tool output (genomic positions, ids) can contain "429"
   if tail -n 3 "$ilog" | grep -qiE 'usage limit|rate[ _]limit|limit reached|overloaded|"status":? ?429' && [[ "$before" == "$after" ]]; then
