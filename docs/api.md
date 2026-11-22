@@ -250,6 +250,11 @@ events as objects `{"type": <type>, ...payload}`; `reply` is the final assistant
   (shown in the panel as `widget-error-<id>` and inside the frame). The runtime evaluates CommonJS-style JS
   (`exports.default = Widget`; `require` only for react/react-dom/plotly) through an inline `<script>` element – the
   CSP has no `'unsafe-eval'`. Widgets whose input SQL uses `$selected` refetch `panel-data` with the selection.
+- Implementation (T41b): the parent compiles `panels[].code` with sucrase (`frontend/src/widget-runtime/compile.ts`,
+  transforms `typescript` (tsx only) + `jsx` (classic runtime → `React.createElement`) + `imports` (ESM →
+  `exports`/`require`)); the compiler is a lazy chunk loaded together with the srcdoc. A compile error is sent to the
+  frame as a module that throws `Compile error (<language>): <message> (<line>:<col>)`, so it shows like a load error
+  (in the frame and as `widget-error-<id>`).
 - `create_widget` defaults `language` to `tsx`; a new panel is appended to the layout at the bottom (`w: 6, h: 8`).
   Same id as an existing widget replaces that widget (new version); same id as a non-widget panel is an error.
 

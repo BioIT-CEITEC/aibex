@@ -1,33 +1,44 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { usePanelData } from '@/lib/usePanelData';
 import type { WidgetPanel as WidgetPanelSpec } from '@/lib/types';
+import type { compileWidget } from '@/widget-runtime/compile';
 import { isFrameMessage, type RenderMessage, type WidgetData } from '@/widget-runtime/protocol';
 import { useAppStore } from '@/store';
 
-/** The srcdoc is ~1.4 MB (Plotly basic + React), so it is loaded only when the first widget appears. */
-let srcdocPromise: Promise<string> | null = null;
-function loadSrcdoc(): Promise<string> {
-  srcdocPromise ??= import('@/widget-runtime/srcdoc').then((m) => m.WIDGET_SRCDOC);
-  return srcdocPromise;
+interface WidgetRuntime {
+  srcdoc: string;
+  compile: typeof compileWidget;
 }
 
 /**
- * Code sent to the iframe. The runtime evaluates CommonJS-style JavaScript (`exports.default = Widget`); compiling the
- * LLM's TSX/JSX with sucrase happens here in T41b – until then the code is sent unchanged, so only plain-JS widgets
- * render and TSX shows a load error inside the panel.
+ * The srcdoc (~1.4 MB, Plotly basic + React) and the TSX compiler (sucrase) are loaded only when the first widget
+ * appears, so dashboards without widgets do not pay for them.
  */
-function widgetModuleCode(panel: WidgetPanelSpec): string {
-  return panel.code;
+let runtimePromise: Promise<WidgetRuntime> | null = null;
+function loadRuntime(): Promise<WidgetRuntime> {
+  runtimePromise ??= Promise.all([import('@/widget-runtime/srcdoc'), import('@/widget-runtime/compile')]).then(
+    ([s, c]) => ({ srcdoc: s.WIDGET_SRCDOC, compile: c.compileWidget }),
+  );
+  return runtimePromise;
 }
 
 /**
- * Level 2 widget (T41a): runs the generated code in `<iframe sandbox="allow-scripts">` (opaque origin, no parent DOM)
+ * Code sent to the iframe: the panel's TSX/JSX compiled by sucrase to CommonJS (`exports.default = Widget`). A compile
+ * error becomes a module that throws it, so the frame shows it like any load error (and reports it back).
+ */
+function widgetModuleCode(panel: WidgetPanelSpec, compile: typeof compileWidget): string {
+  const result = compile(panel.code, panel.language ?? 'tsx');
+  return result.ok ? result.code : `throw new Error(${JSON.stringify(result.error)});`;
+}
+
+/**
+ * Level 2 widget (T41a/b): runs the generated code in `<iframe sandbox="allow-scripts">` (opaque origin, no parent DOM)
  * whose srcdoc carries a `default-src 'none'` CSP (no network). Data from `panel-data` and the linked selection are
  * sent by postMessage; the widget's `onSelect(keys)` comes back as a store selection. Errors stay inside the panel.
  */
 export function WidgetPanel({ panel, state }: { panel: WidgetPanelSpec; state: ReturnType<typeof usePanelData> }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [srcdoc, setSrcdoc] = useState<string | null>(null);
+  const [runtime, setRuntime] = useState<WidgetRuntime | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   // the iframe window that said `ready` (a remounted iframe gets a new window and must say ready again)
   const [readyWindow, setReadyWindow] = useState<Window | null>(null);
@@ -37,8 +48,8 @@ export function WidgetPanel({ panel, state }: { panel: WidgetPanelSpec; state: R
 
   useEffect(() => {
     let cancelled = false;
-    loadSrcdoc().then(
-      (doc) => !cancelled && setSrcdoc(doc),
+    loadRuntime().then(
+      (rt) => !cancelled && setRuntime(rt),
       (e: unknown) => !cancelled && setLoadError(e instanceof Error ? e.message : String(e)),
     );
     return () => {
@@ -61,11 +72,11 @@ export function WidgetPanel({ panel, state }: { panel: WidgetPanelSpec; state: R
   }, [select]);
 
   const data = state.data as unknown as WidgetData | null;
-  const code = widgetModuleCode(panel);
+  const code = useMemo(() => (runtime ? widgetModuleCode(panel, runtime.compile) : null), [runtime, panel]);
 
   useEffect(() => {
     const win = frameRef.current?.contentWindow;
-    if (!readyWindow || win !== readyWindow || !data) return;
+    if (!readyWindow || win !== readyWindow || !data || code === null) return;
     const message: RenderMessage = { aibex: 1, type: 'render', code, data, selection };
     // the sandboxed frame has an opaque origin, so '*' is the only target that works; the frame checks the source
     readyWindow.postMessage(message, '*');
@@ -75,13 +86,13 @@ export function WidgetPanel({ panel, state }: { panel: WidgetPanelSpec; state: R
 
   return (
     <div className="flex h-full flex-col gap-1">
-      {srcdoc ? (
+      {runtime ? (
         <iframe
           ref={frameRef}
           data-testid={`widget-frame-${panel.id}`}
           title={panel.title || panel.id}
           sandbox="allow-scripts"
-          srcDoc={srcdoc}
+          srcDoc={runtime.srcdoc}
           // backup for a missed `ready`: the runtime script ends the body, so its listener exists by `load`
           onLoad={() => setReadyWindow(frameRef.current?.contentWindow ?? null)}
           className="min-h-0 w-full flex-1 border-0"

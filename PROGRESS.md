@@ -57,7 +57,7 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 - [x] T40a Widget validation (code size/blocklist, input SQL read-only) + `panel-data` input resolution with `$selected` as a bound parameter [A4.2, A4.3] (after: T13b, T15b)
 - [x] T40b `create_widget` tool in the chat loop: layout placement, replace-by-id, undo [A4.1] (after: T40a, T22b)
 - [x] T41a Iframe runtime: srcdoc with CSP + inlined React and Plotly (minified dist), postMessage data/selection bridge (`widget-frame-<id>`) (after: T17a)
-- [ ] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
+- [x] T41b TSX compile in the browser (sucrase), compile/runtime errors shown in the panel [E4.1] (after: T41a, T40b, T24a)
 - [ ] T42 Example widget prompt on ADAR2 ("editing sites along the gene") with the real code model [M4] (after: T41b, T32)
 
 ## Phase 5 – polish
@@ -71,6 +71,20 @@ IDs in brackets refer to `docs/acceptance.md`; contracts are in `docs/api.md`. "
 
 ## Log
 <!-- newest first: date time · task · result · notes / blockers / questions for Vojta -->
+- 2026-11-22 · T41b · done · `WidgetPanel` compiles widget TSX/JSX in the browser with sucrase
+  (`src/widget-runtime/compile.ts`: typescript (tsx only) + jsx classic + imports → CommonJS); the compiler is a lazy
+  chunk (200 kB, 46 kB gzip) loaded with the srcdoc, main bundle unchanged. Compile errors (with line:col) are sent to
+  the frame as a throwing module → shown in the frame and as `widget-error-<id>`. Fixed the FakeProvider widget code
+  (`data.rows` → `data.inputs.rows`, the documented shape), so "add widget" now shows 50. Found that E4.1's
+  `toContainText(/\d+/)` on the frame body also matches digits in the srcdoc's inline scripts (weak, left unchanged);
+  added a stricter e2e that the visible count is "50". New e2e tests in `e2e/widget-runtime.spec.ts`: TSX widget with
+  `import React`, types, generics, JSX and a Plotly bar chart; FakeProvider "add widget" shows 50; TSX compile error
+  with position. Screenshots `logs/screens/T41b-widget-tsx.png`, `T41b-add-widget.png` (checked). Off-viewport iframes
+  come out blank in Chromium fullPage screenshots, so the tests scroll the frame into view first. E4.1's own screenshot
+  is still blank for this reason. docs/api.md: T41b implementation note. Checks: `make test` 429 pass + ruff,
+  typecheck and lint clean; acceptance phases 1–4 (non-live) 66/66 pass; `make e2e` 22/22 pass, **E4.1 passes now**;
+  `npm run build` ok. New dependency: `sucrase` 3.35 (TSX → JS in the browser, the compiler named in
+  docs/architecture.md; small, no native code). Next: T42 (real code model on ADAR2, M4 – needs live LLM).
 - 2026-11-22 · T41a · done · Widget panels now render in `<iframe sandbox="allow-scripts">` (`widget-frame-<id>`)
   whose srcdoc starts with the `default-src 'none'` CSP and inlines Plotly basic + a React runtime (no CDN). React 19
   has no UMD build, so `frontend/widget-runtime-plugin.ts` bundles `src/widget-runtime/runtime.tsx` + React with a

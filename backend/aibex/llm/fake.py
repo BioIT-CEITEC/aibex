@@ -31,7 +31,7 @@ _WIDGET_RE = re.compile(r"\badd\s+(?:a\s+)?widget\b", re.IGNORECASE)
 _SPLIT_RE = re.compile(r"\s*(?:,|;|\band\b|\s)\s*", re.IGNORECASE)
 
 WIDGET_CODE = """export default function Widget({ data }: { data: any }) {
-  const n = data?.rows?.rows?.length ?? 0;
+  const n = data?.inputs?.rows?.rows?.length ?? 0;
   return (
     <div style={{ padding: 16, fontFamily: 'sans-serif' }}>
       <div style={{ fontSize: 32, fontWeight: 600 }}>{n}</div>
